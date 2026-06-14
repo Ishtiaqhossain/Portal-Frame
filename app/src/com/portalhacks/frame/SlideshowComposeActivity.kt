@@ -91,10 +91,10 @@ class SlideshowComposeActivity : ComponentActivity() {
         controller.blank()
         startDimming() // ease screen brightness down at night, up in the morning
         val prefs = getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE)
-        currentAlbums = Albums.list(prefs)
+        currentAlbums = Albums.enabled(prefs)
 
         if (currentAlbums.isEmpty()) {
-            // No albums configured: show the bundled samples.
+            // No albums playing (none configured, or all stopped): show the bundled samples.
             controller.start()
             return
         }
@@ -186,8 +186,8 @@ class SlideshowComposeActivity : ComponentActivity() {
     /** Recompute the slideshow from all albums' caches and apply it if it changed. */
     private fun rebuildFromCaches(showHint: Boolean) {
         val prefs = getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE)
-        if (currentAlbums != Albums.list(prefs)) {
-            return // the album set changed while fetching
+        if (currentAlbums != Albums.enabled(prefs)) {
+            return // the playing album set changed while fetching
         }
         val merged = currentAlbums.flatMap { AlbumCache.read(prefs, it) ?: emptyList() }
         if (merged.isEmpty()) {

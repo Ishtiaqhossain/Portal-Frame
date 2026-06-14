@@ -45,6 +45,15 @@ class ConfigReceiver : BroadcastReceiver() {
                 Log.i("PortalFrame", "album removed: '$url'")
             }
         }
+        for (pair in arrayOf("enable_url" to true, "disable_url" to false)) {
+            if (intent.hasExtra(pair.first)) {
+                val url = intent.getStringExtra(pair.first)?.trim() ?: ""
+                if (url.isNotEmpty()) {
+                    Albums.setEnabled(prefs, url, pair.second)
+                    Log.i("PortalFrame", "album ${if (pair.second) "resumed" else "stopped"}: '$url'")
+                }
+            }
+        }
 
         val ed = prefs.edit()
         var any = false
@@ -65,6 +74,7 @@ class ConfigReceiver : BroadcastReceiver() {
         const val PREFS = "portalframe"
         const val KEY_ALBUM = "album_url" // legacy single album (migrated into KEY_ALBUMS)
         const val KEY_ALBUMS = "album_urls" // JSON array of configured album URLs
+        const val KEY_ALBUMS_DISABLED = "album_urls_disabled" // JSON array of stopped album URLs
 
         // Slideshow settings (written by PhotosActivity, read by SlideshowController).
         const val KEY_DELAY_MS = "delay_ms"     // ms each photo is held

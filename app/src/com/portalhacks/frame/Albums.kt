@@ -14,6 +14,34 @@ import org.json.JSONException
  */
 internal object Albums {
 
+    /** Album URLs the slideshow should actually play (configured minus stopped). */
+    @JvmStatic
+    fun enabled(prefs: SharedPreferences): List<String> {
+        val off = disabled(prefs)
+        return list(prefs).filter { it !in off }
+    }
+
+    /** Whether [url] is currently playing (not stopped). */
+    @JvmStatic
+    fun isEnabled(prefs: SharedPreferences, url: String): Boolean = url !in disabled(prefs)
+
+    /** Stop/resume [url] without removing it from the list. */
+    @JvmStatic
+    fun setEnabled(prefs: SharedPreferences, url: String, on: Boolean) {
+        val off = disabled(prefs).toMutableSet()
+        val changed = if (on) off.remove(url) else off.add(url)
+        if (changed) saveDisabled(prefs, off)
+    }
+
+    private fun disabled(prefs: SharedPreferences): Set<String> =
+        parse(prefs.getString(ConfigReceiver.KEY_ALBUMS_DISABLED, null) ?: "").toSet()
+
+    private fun saveDisabled(prefs: SharedPreferences, urls: Set<String>) {
+        val arr = JSONArray()
+        for (u in urls) arr.put(u)
+        prefs.edit().putString(ConfigReceiver.KEY_ALBUMS_DISABLED, arr.toString()).apply()
+    }
+
     /** The configured album URLs (migrating the legacy single-album pref if needed). */
     @JvmStatic
     fun list(prefs: SharedPreferences): List<String> {
@@ -37,12 +65,13 @@ internal object Albums {
         return true
     }
 
-    /** Remove [url] if present (and drop its cache). */
+    /** Remove [url] if present (and drop its cache + any stopped state). */
     @JvmStatic
     fun remove(prefs: SharedPreferences, url: String) {
         val cur = list(prefs).toMutableList()
         if (cur.remove(url)) {
             save(prefs, cur)
+            setEnabled(prefs, url, true) // clear any stopped state
             AlbumCache.delete(prefs, url)
         }
     }
@@ -52,6 +81,7 @@ internal object Albums {
     fun clear(prefs: SharedPreferences) {
         for (u in list(prefs)) AlbumCache.delete(prefs, u)
         save(prefs, emptyList())
+        prefs.edit().remove(ConfigReceiver.KEY_ALBUMS_DISABLED).apply()
     }
 
     private fun save(prefs: SharedPreferences, urls: List<String>) {

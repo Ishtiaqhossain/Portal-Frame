@@ -86,7 +86,7 @@ class PhotosActivity : Activity() {
         val gotoExtra = intent?.getStringExtra("goto")
         when (gotoExtra) {
             "scan" -> startScan()
-            "manual" -> showManualEntry()
+            "manual" -> startScan() // manual entry now lives inside the scanner panel
             else -> showStatus()
         }
     }
@@ -217,7 +217,7 @@ class PhotosActivity : Activity() {
             Ui.primary(this, if (hasAlbum) "Change album" else "Add album") { startScan() },
         )
         albumCard.addView(
-            Ui.outline(this, "Enter link manually") { showManualEntry() },
+            Ui.outline(this, "Enter link manually") { startScan() },
         )
         if (hasAlbum) {
             val stop = Ui.destructive(this, "Stop showing photos", null)
@@ -380,59 +380,18 @@ class PhotosActivity : Activity() {
     // ------------------------------------------------ Manual entry
 
     /** Type/paste the album link using the on-screen keyboard (QR-less fallback). */
-    private fun showManualEntry() {
-        stopCamera()
-        stopArmed = false
-        showingStatus = false
-        root.removeAllViews()
-        val col = Ui.screen(this, root)
-
-        col.addView(Ui.title(this, "Enter album link"))
-        val help = Ui.body(
-            this,
-            "Paste or type a shared-album link. Google Photos links start with " +
-                "https://photos.app.goo.gl/ ; iCloud links start with " +
-                "https://www.icloud.com/sharedalbum/#.",
-        )
-        topMargin(help, 12)
-        col.addView(help)
-
-        val edit = Ui.field(this, "https://photos.app.goo.gl/…")
-        edit.setSingleLine(true)
-        edit.inputType = InputType.TYPE_CLASS_TEXT or
-            InputType.TYPE_TEXT_VARIATION_URI or
-            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        edit.setText(album())
-        edit.setSelection(edit.text.length)
-        col.addView(edit)
-
-        col.addView(
-            Ui.primary(this, "Save") {
-                val url = edit.text.toString().trim()
-                if (!isPhotosLink(url)) {
-                    toast("That doesn't look like a Google Photos or iCloud link")
-                } else {
-                    Albums.add(prefs(), url)
-                    Log.i(TAG, "album added via manual entry: $url")
-                    hideKeyboard(edit)
-                    toast("Album set ✓")
-                    finish() // back to the Compose settings screen (sticky Done + preview)
-                }
-            },
-        )
-        col.addView(
-            Ui.secondary(this, "Cancel") {
-                hideKeyboard(edit)
-                finish()
-            },
-        )
-
-        // Pop the on-screen keyboard for the field.
-        edit.requestFocus()
-        edit.post {
-            val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
-            imm?.showSoftInput(edit, InputMethodManager.SHOW_IMPLICIT)
+    /** Validate the pasted link and add it to the album list (from the scanner panel). */
+    private fun addTypedAlbum(edit: EditText) {
+        val url = edit.text.toString().trim()
+        if (!isPhotosLink(url)) {
+            toast("That doesn't look like a Google Photos or iCloud link")
+            return
         }
+        Albums.add(prefs(), url)
+        Log.i(TAG, "album added via manual entry: $url")
+        hideKeyboard(edit)
+        toast("Album added ✓")
+        finish() // back to the Compose settings screen
     }
 
     private fun hideKeyboard(v: View) {
@@ -531,19 +490,29 @@ class PhotosActivity : Activity() {
         hp.topMargin = Ui.dp(this, 72f) // clear the top system overlay
         f.addView(scanHint, hp)
 
-        val typeLink = Ui.secondary(this, "Can't scan? Type the link") { showManualEntry() }
-        val tp = FrameLayout.LayoutParams(WRAP, WRAP)
-        tp.gravity = Gravity.BOTTOM or Gravity.START
-        tp.bottomMargin = Ui.dp(this, 28f)
-        tp.leftMargin = Ui.dp(this, 28f)
-        f.addView(typeLink, tp)
+        // Single add-album UI: scan the QR above, or paste a link in this panel.
+        val panel = LinearLayout(this)
+        panel.orientation = LinearLayout.VERTICAL
+        panel.setBackgroundColor(0xE6101010.toInt()) // legible over the camera
+        val padH = Ui.dp(this, 24f)
+        panel.setPadding(padH, Ui.dp(this, 16f), padH, Ui.dp(this, 20f))
+        val panelLp = FrameLayout.LayoutParams(MATCH, WRAP)
+        panelLp.gravity = Gravity.BOTTOM
+        panel.layoutParams = panelLp
 
-        val cancel = Ui.secondary(this, "Cancel") { finish() }
-        val cp = FrameLayout.LayoutParams(WRAP, WRAP)
-        cp.gravity = Gravity.BOTTOM or Gravity.END
-        cp.bottomMargin = Ui.dp(this, 28f)
-        cp.rightMargin = Ui.dp(this, 28f)
-        f.addView(cancel, cp)
+        panel.addView(Ui.body(this, "Can’t scan? Paste a Google Photos or iCloud link:"))
+
+        val edit = Ui.field(this, "https://photos.app.goo.gl/…  or  https://www.icloud.com/sharedalbum/#…")
+        edit.setSingleLine(true)
+        edit.inputType = InputType.TYPE_CLASS_TEXT or
+            InputType.TYPE_TEXT_VARIATION_URI or
+            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        panel.addView(edit)
+
+        panel.addView(Ui.primary(this, "Add album") { addTypedAlbum(edit) })
+        panel.addView(Ui.secondary(this, "Cancel") { finish() })
+
+        f.addView(panel)
 
         root.addView(f)
 

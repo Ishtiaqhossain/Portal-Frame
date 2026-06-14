@@ -84,14 +84,14 @@ the share link on your phone:
 2. Turn on **Public Website** (in the Shared Album's settings) and **copy the link** (starts with
    `https://www.icloud.com/sharedalbum/…`).
 
-Then, on the Portal:
+Then, on the Portal, tap **Add album**. That one screen lets you either:
 
-- **Easiest — scan the QR:** tap **Add album**, allow the camera once, and hold your phone up to
-  the Portal. Make the QR **fill your phone screen at full brightness** and hold it **about half a
-  meter (1.5 ft) away**, steady, until you see **"Album set ✓"**. (Easier for Google Photos, which
-  shows a QR directly; for iCloud, generate a QR from the link or use manual entry below.)
-- **No QR? Type the link:** tap **Enter link manually** and paste/type the shared-album link
-  (`https://photos.app.goo.gl/…` or `https://www.icloud.com/sharedalbum/#…`), then **Save**.
+- **Scan the QR:** allow the camera once and hold your phone up to the Portal — make the QR **fill
+  your phone screen at full brightness**, held **about half a meter (1.5 ft) away**, steady, until
+  you see **"Album added ✓"**. (Google Photos shows a QR directly; for iCloud, generate a QR from
+  the link or just paste it — see below.)
+- **Paste the link:** in the same screen, type/paste the shared-album link into the field
+  (`https://photos.app.goo.gl/…` or `https://www.icloud.com/sharedalbum/#…`) and tap **Add album**.
 
 Once set, the Album card shows the album's **title and a preview of its first photo**, so you can
 confirm it's the right one.
@@ -127,9 +127,11 @@ Tap **Done** to leave setup.
   weather, night warmth, and "On This Day" memories. Turn any on/off to taste.
 
 ### Managing albums
-- **Multiple albums** — tap **Add album** (or **Enter link manually**) again to add more; the
-  slideshow plays photos from all of them, merged together. Each album shows its title and a
-  thumbnail of its first photo so you can tell them apart.
+- **Multiple albums** — tap **Add album** again (scan or paste) to add more; the slideshow plays
+  photos from all of them, merged together. Each album shows its title and a thumbnail of its first
+  photo so you can tell them apart.
+- **Stop one temporarily** — flip an album's **Playing** switch to off. It stays in the list (link
+  kept) but its photos are paused; flip it back on anytime.
 - **Remove one** — tap **Remove** next to an album, then **Confirm**. The others keep playing.
 - **Remove all** — remove each album; with none left, Frame falls back to the built‑in samples.
 
@@ -145,8 +147,8 @@ Tap **Done** to leave setup.
     `https://photos.google.com/share/…`, or iCloud `https://www.icloud.com/sharedalbum/#…`.
   - Open the album link in a browser to confirm it's still shared and not empty.
 - **The QR won't scan.** The Portal's camera is fixed‑focus and wide — hold the phone **~0.5 m
-  away**, **full screen brightness**, and let the QR **fill the on‑screen box**. Still no luck? Use
-  **Enter link manually** instead.
+  away**, **full screen brightness**, and let the QR **fill the on‑screen box**. Still no luck?
+  Paste the link into the field on the same **Add album** screen instead.
 - **"Frame" isn't in the screensaver list.** Make sure the app installed (the **Frame** icon is on
   the home screen), then tap **Use as screensaver** again.
 - **Videos are skipped.** Frame shows photos only; videos in the album are ignored.

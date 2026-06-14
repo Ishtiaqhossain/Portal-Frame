@@ -150,10 +150,8 @@ class SettingsActivity : ComponentActivity() {
                     Body("Add a Google Photos or iCloud shared album to show your own photos.")
                     Spacer(Modifier.height(12.dp))
                 }
-                // Add another album — by QR scan (with a type-the-link fallback) or directly.
+                // One add-album screen — scan a QR or paste a link there.
                 PrimaryBtn("Add album") { gotoPhotos("scan") }
-                Spacer(Modifier.height(10.dp))
-                OutlineBtn("Enter link manually") { gotoPhotos("manual") }
             }
         }
         val settingsCards: @Composable () -> Unit = {
@@ -307,6 +305,7 @@ class SettingsActivity : ComponentActivity() {
             }
         }
 
+        var on by remember(url) { mutableStateOf(Albums.isEnabled(prefs, url)) }
         Row(
             Modifier.fillMaxWidth().padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -335,7 +334,8 @@ class SettingsActivity : ComponentActivity() {
             Column(Modifier.weight(1f)) {
                 Text(
                     title.ifEmpty { if (failed) "Couldn't load" else "Loading…" },
-                    color = PortalColors.Text, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                    color = if (on) PortalColors.Text else PortalColors.TextMuted,
+                    fontSize = 17.sp, fontWeight = FontWeight.Bold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
@@ -344,13 +344,29 @@ class SettingsActivity : ComponentActivity() {
                     color = PortalColors.TextMuted, fontSize = 13.sp,
                     maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
                 )
-            }
-            Spacer(Modifier.width(12.dp))
-            OutlinedButton(
-                onClick = { if (!armed) armed = true else onRemove() },
-                modifier = Modifier.height(48.dp),
-            ) {
-                Text(if (armed) "Confirm" else "Remove", color = PortalColors.Red, fontSize = 15.sp)
+                Spacer(Modifier.height(8.dp))
+                // Stop/resume (keeps the album, just pauses it) + Remove (two-tap).
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = on,
+                        onCheckedChange = { on = it; Albums.setEnabled(prefs, url, it) },
+                        colors = SwitchDefaults.colors(checkedTrackColor = PortalColors.Blue),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        if (on) "Playing" else "Stopped",
+                        color = PortalColors.TextMuted, fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        if (armed) "Confirm" else "Remove",
+                        color = PortalColors.Red, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { if (!armed) armed = true else onRemove() }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
             }
         }
     }
