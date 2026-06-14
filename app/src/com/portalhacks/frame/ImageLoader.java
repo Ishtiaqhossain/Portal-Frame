@@ -1,4 +1,4 @@
-package com.example.portalframe;
+package com.portalhacks.frame;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -332,7 +332,15 @@ public class ImageLoader {
         }
     }
 
+    // Cap a single image download so a hostile/oversized response can't fill the
+    // cache disk or blow up decoding (a photo thumbnail is well under this).
+    private static final int MAX_IMAGE_BYTES = 30 * 1024 * 1024;
+
     private boolean download(String urlStr, File dest) {
+        if (urlStr == null || !urlStr.startsWith("https://")) {
+            Log.w(TAG, "refusing non-HTTPS image URL");
+            return false;
+        }
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL(urlStr).openConnection();
@@ -350,7 +358,16 @@ public class ImageLoader {
             OutputStream out = new FileOutputStream(tmp);
             byte[] buf = new byte[8192];
             int n;
+            int total = 0;
             while ((n = in.read(buf)) != -1) {
+                total += n;
+                if (total > MAX_IMAGE_BYTES) {
+                    out.close();
+                    in.close();
+                    tmp.delete();
+                    Log.w(TAG, "image exceeds " + MAX_IMAGE_BYTES + " bytes: " + urlStr);
+                    return false;
+                }
                 out.write(buf, 0, n);
             }
             out.flush();

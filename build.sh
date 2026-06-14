@@ -10,7 +10,7 @@ ANDROID_JAR="$SDK/platforms/android-36/android.jar"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP="$ROOT/app"
 BUILD="$ROOT/build"
-PKG_PATH="com/example/portalframe"
+PKG_PATH="com/portalhacks/frame"
 LIBS="$APP/libs"
 ZXING="$LIBS/zxing-core-3.5.3.jar"   # pure-Java QR decoder, vendored (no Gradle here)
 

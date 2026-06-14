@@ -1,4 +1,4 @@
-package com.example.portalframe
+package com.portalhacks.frame
 
 import android.content.Context
 import android.content.Intent
@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,6 +34,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +62,10 @@ class SettingsActivity : ComponentActivity() {
 
     private val prefs: SharedPreferences
         get() = getSharedPreferences(ConfigReceiver.PREFS, Context.MODE_PRIVATE)
+
+    // Used to load the album's first photo for the preview thumbnail (reuses the
+    // slideshow's on-disk image cache).
+    private val loader by lazy { ImageLoader(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,9 +136,9 @@ class SettingsActivity : ComponentActivity() {
                     val active = isOurScreensaver()
                     Body(
                         if (active)
-                            "✓ Portal Frame is your screensaver. Your photos appear when the Portal is idle."
+                            "✓ Frame is your screensaver. Your photos appear when the Portal is idle."
                         else
-                            "Tap below, then choose “Portal Frame” so your photos show when the Portal is idle.",
+                            "Tap below, then choose “Frame” so your photos show when the Portal is idle.",
                     )
                     Spacer(Modifier.height(12.dp))
                     if (active) OutlineBtn("Change screensaver") { openScreensaver() }
@@ -139,10 +148,7 @@ class SettingsActivity : ComponentActivity() {
                 // Album
                 Card(if (hasAlbum) "Album" else "No album yet") {
                     if (hasAlbum) {
-                        Text(
-                            album, color = PortalColors.Blue, fontSize = 16.sp,
-                            maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
-                        )
+                        AlbumPreview(album)
                     } else {
                         Body("Add a Google Photos shared album to show your own photos.")
                     }
@@ -214,12 +220,26 @@ class SettingsActivity : ComponentActivity() {
                   } // end RIGHT column
                 } // end Row
 
-                Spacer(Modifier.height(20.dp))
-                Button(
-                    onClick = { finish() },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PortalColors.Surface),
-                ) { Text("Done", color = PortalColors.Text, fontSize = 18.sp) }
+                // Leave room so the last card scrolls clear of the pinned Done bar below.
+                Spacer(Modifier.height(96.dp))
+            }
+
+            // Pinned Done bar — always visible, so it's discoverable without scrolling
+            // to the bottom of a long settings list.
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(PortalColors.Bg),
+            ) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(PortalColors.Hairline))
+                Box(
+                    Modifier.fillMaxWidth().padding(horizontal = 40.dp, vertical = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Button(
+                        onClick = { finish() },
+                        modifier = Modifier.widthIn(max = 1100.dp).fillMaxWidth().height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PortalColors.Surface),
+                    ) { Text("Done", color = PortalColors.Text, fontSize = 18.sp) }
+                }
             }
         }
     }
@@ -238,6 +258,84 @@ class SettingsActivity : ComponentActivity() {
             Spacer(Modifier.height(8.dp))
             content()
         }
+    }
+
+    /**
+     * Album preview: the first photo (so the user can recognise which album is set)
+     * with the album title and link beneath. Starts from the cache the slideshow
+     * writes; if the album was just added and isn't cached yet, fetches it once in
+     * the background, persists it, and then shows the first photo.
+     */
+    @Composable
+    private fun AlbumPreview(album: String) {
+        var bmp by remember(album) { mutableStateOf<android.graphics.Bitmap?>(null) }
+        var title by remember(album) { mutableStateOf("") }
+        var failed by remember(album) { mutableStateOf(false) }
+
+        LaunchedEffect(album) {
+            if (album.isEmpty()) return@LaunchedEffect
+            AlbumCache.title(prefs, album)?.let { title = it }
+            val firstId = AlbumCache.firstId(prefs, album)
+            if (firstId != null) {
+                loader.load(firstId, PREVIEW_W, PREVIEW_H) { b -> bmp = b }
+            } else {
+                // Not fetched yet (album just added) — fetch once, persist, then show.
+                loader.executor().execute {
+                    try {
+                        val a = GooglePhotosSource.fetch(album)
+                        if (a.slides.isEmpty()) {
+                            runOnUiThread { failed = true }
+                            return@execute
+                        }
+                        AlbumCache.write(prefs, album, a.slides, a.title)
+                        val id = a.slides[0].id
+                        runOnUiThread {
+                            // ignore if the user changed the album while fetching
+                            if (album == (prefs.getString(ConfigReceiver.KEY_ALBUM, "") ?: "")) {
+                                title = a.title ?: ""
+                                loader.load(id, PREVIEW_W, PREVIEW_H) { b -> bmp = b }
+                            }
+                        }
+                    } catch (_: Exception) {
+                        runOnUiThread { failed = true }
+                    }
+                }
+            }
+        }
+
+        val shape = RoundedCornerShape(14.dp)
+        val image = bmp
+        if (image != null) {
+            Image(
+                bitmap = image.asImageBitmap(),
+                contentDescription = "First photo from the album",
+                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(shape),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Box(
+                Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(shape)
+                    .background(PortalColors.Field),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (failed) "Couldn't load a preview" else "Loading preview…",
+                    color = PortalColors.TextMuted, fontSize = 15.sp,
+                )
+            }
+        }
+        if (title.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                title, color = PortalColors.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            album, color = PortalColors.Blue, fontSize = 14.sp,
+            maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
+        )
     }
 
     @Composable
@@ -298,6 +396,9 @@ class SettingsActivity : ComponentActivity() {
     private fun setLong(key: String, v: Long) = prefs.edit().putLong(key, v).apply()
 
     companion object {
+        private const val PREVIEW_W = 720 // 16:9 thumbnail decode size for the album preview
+        private const val PREVIEW_H = 405
+
         private val DELAY_CHOICES = longArrayOf(4000, 6000, 10000, 30000, 60000)
         private val FADE_CHOICES = longArrayOf(2000, 1200, 500)
         private val FADE_LABELS = arrayOf("Slow", "Normal", "Fast")

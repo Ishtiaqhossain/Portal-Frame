@@ -1,4 +1,4 @@
-package com.example.portalframe;
+package com.portalhacks.frame;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
@@ -149,6 +149,9 @@ public class SlideshowController {
         front.setAlpha(0f);
 
         int margin = Ui.dp(context, 28);
+        // Height the clock box (and, matching it, the photo-date caption) sit off the
+        // bottom — so "2 months ago" lines up with the clock's "Sun, Jun 14" date line.
+        int clockBottom = Ui.dp(context, 95);
 
         // Gradient scrims so the white system-overlay pills (top) and our caption
         // text (bottom) stay legible over bright photos — per the Portal design rules.
@@ -195,7 +198,7 @@ public class SlideshowController {
                 FrameLayout.LayoutParams.WRAP_CONTENT);
         ip.gravity = Gravity.BOTTOM | Gravity.END;
         ip.rightMargin = margin;
-        ip.bottomMargin = margin;
+        ip.bottomMargin = clockBottom; // align with the clock's date line, not the screen edge
         info.setLayoutParams(ip);
 
         // Bottom-left: a large clock with a "day, date · weather" line beneath it
@@ -228,7 +231,7 @@ public class SlideshowController {
                 FrameLayout.LayoutParams.WRAP_CONTENT);
         cbp.gravity = Gravity.BOTTOM | Gravity.START;
         cbp.leftMargin = margin;
-        cbp.bottomMargin = Ui.dp(context, 95); // match the Portal home clock's height off the bottom
+        cbp.bottomMargin = clockBottom; // match the Portal home clock's height off the bottom
         clockBox.setLayoutParams(cbp);
 
         // Warm overlay over the photo that fades in at night (Ambient-EQ-lite): the

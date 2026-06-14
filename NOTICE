@@ -1,0 +1,13 @@
+Frame (PortalFrame)
+Copyright (c) 2026 Ishtiaq Hossain
+
+This product includes third-party software:
+
+ZXing ("Zebra Crossing") — core module
+  Vendored at: app/libs/zxing-core-3.5.3.jar
+  Homepage:    https://github.com/zxing/zxing
+  License:     Apache License, Version 2.0
+               https://www.apache.org/licenses/LICENSE-2.0
+
+AndroidX / Jetpack Compose, the Kotlin standard library, and the Android SDK
+(resolved via Gradle) are likewise licensed under the Apache License, Version 2.0.

@@ -1,4 +1,4 @@
-package com.example.portalframe;
+package com.portalhacks.frame;
 
 /**
  * One slideshow item: an image id (asset path or URL), an optional caption

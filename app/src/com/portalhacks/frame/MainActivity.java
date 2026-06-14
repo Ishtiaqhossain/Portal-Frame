@@ -1,4 +1,4 @@
-package com.example.portalframe;
+package com.portalhacks.frame;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -6,15 +6,10 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -109,7 +104,7 @@ public class MainActivity extends Activity {
         // Album configured: start straight from the cached album if we have it
         // (disk-cached images make the first photo appear near-instantly);
         // otherwise show a black "Loading…" screen — never the samples.
-        List<Slide> cached = readCachedAlbum(prefs, albumUrl);
+        List<Slide> cached = AlbumCache.read(prefs, albumUrl);
         if (cached != null && !cached.isEmpty()) {
             currentIds = idsOf(cached);
             controller.setItems(cached);
@@ -217,7 +212,9 @@ public class MainActivity extends Activity {
                                 }
                                 return;
                             }
-                            persistAlbum(url, photos, album.title);
+                            AlbumCache.write(
+                                    getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE),
+                                    url, photos, album.title);
                             List<String> newIds = idsOf(photos);
                             if (!newIds.equals(currentIds)) {
                                 currentIds = newIds;
@@ -250,58 +247,4 @@ public class MainActivity extends Activity {
         return ids;
     }
 
-    // JSON (no raw newlines/tabs) so the value survives SharedPreferences' XML
-    // round-trip intact — a delimiter-based blob got corrupted by control-char
-    // escaping and produced phantom entries.
-    private void persistAlbum(String url, List<Slide> photos, String title) {
-        JSONArray arr = new JSONArray();
-        for (Slide s : photos) {
-            JSONObject o = new JSONObject();
-            try {
-                o.put("u", s.id);
-                o.put("c", s.caption == null ? "" : s.caption);
-                o.put("t", s.timeMs);
-                o.put("pt", s.portrait);
-            } catch (JSONException ignored) {
-                continue;
-            }
-            arr.put(o);
-        }
-        getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE).edit()
-                .putString(ConfigReceiver.KEY_PHOTO_CACHE, arr.toString())
-                .putString(ConfigReceiver.KEY_PHOTO_CACHE_URL, url)
-                .putString(ConfigReceiver.KEY_ALBUM_TITLE, title == null ? "" : title)
-                .apply();
-        Log.i(TAG, "persisted " + photos.size() + " photos to cache");
-    }
-
-    private List<Slide> readCachedAlbum(SharedPreferences prefs, String url) {
-        String cachedUrl = prefs.getString(ConfigReceiver.KEY_PHOTO_CACHE_URL, "");
-        if (!url.equals(cachedUrl)) {
-            return null; // cache belongs to a different album
-        }
-        String blob = prefs.getString(ConfigReceiver.KEY_PHOTO_CACHE, "");
-        if (TextUtils.isEmpty(blob)) {
-            return null;
-        }
-        List<Slide> out = new ArrayList<>();
-        try {
-            JSONArray arr = new JSONArray(blob);
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject o = arr.getJSONObject(i);
-                String id = o.optString("u", "");
-                String caption = o.optString("c", "");
-                long t = o.optLong("t", Slide.NO_DATE);
-                boolean portrait = o.optBoolean("pt", false);
-                if (!id.isEmpty()) {
-                    out.add(new Slide(id, caption.isEmpty() ? null : caption, t, portrait));
-                }
-            }
-        } catch (JSONException e) {
-            Log.w(TAG, "bad photo cache, ignoring", e);
-            return null;
-        }
-        Log.i(TAG, "read " + out.size() + " photos from cache");
-        return out;
-    }
 }

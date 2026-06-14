@@ -1,4 +1,4 @@
-package com.example.portalframe;
+package com.portalhacks.frame;
 
 import android.util.Log;
 
@@ -174,7 +174,14 @@ public class GooglePhotosSource {
         return Slide.NO_DATE;
     }
 
+    // Cap how much of the share page we'll buffer: it's normally a few MB, and an
+    // unbounded read of a hostile/oversized response could exhaust memory.
+    private static final int MAX_HTML_BYTES = 12 * 1024 * 1024;
+
     private static String httpGet(String urlStr) throws Exception {
+        if (urlStr == null || !urlStr.startsWith("https://")) {
+            throw new java.io.IOException("refusing non-HTTPS album URL");
+        }
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL(urlStr).openConnection();
@@ -189,7 +196,13 @@ public class GooglePhotosSource {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
+            int total = 0;
             while ((n = in.read(buf)) != -1) {
+                total += n;
+                if (total > MAX_HTML_BYTES) {
+                    in.close();
+                    throw new java.io.IOException("album page exceeds " + MAX_HTML_BYTES + " bytes");
+                }
                 bos.write(buf, 0, n);
             }
             in.close();

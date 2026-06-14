@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.portalframe"
+    namespace = "com.portalhacks.frame"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.portalframe"
+        applicationId = "com.portalhacks.frame"
         minSdk = 28
         targetSdk = 29
         versionCode = 1

@@ -3,11 +3,17 @@ build/
 
 # Gradle / Android Studio
 .gradle/
+.kotlin/
 app/build/
 local.properties
 .idea/
 *.iml
 captures/
+
+# Signing keys & build artifacts (never commit)
+*.keystore
+*.jks
+*.apk
 
 # macOS
 .DS_Store

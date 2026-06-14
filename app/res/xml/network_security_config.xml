@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app only ever talks to Google Photos / Google image hosts over HTTPS.
+     Disallow cleartext traffic outright so a network attacker can't downgrade a
+     request and inject images or a tampered album page. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

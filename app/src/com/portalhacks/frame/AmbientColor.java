@@ -1,4 +1,4 @@
-package com.example.portalframe;
+package com.portalhacks.frame;
 
 import android.graphics.Bitmap;
 import android.graphics.Color;

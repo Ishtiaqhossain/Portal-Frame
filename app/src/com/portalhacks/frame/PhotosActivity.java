@@ -1,4 +1,4 @@
-package com.example.portalframe;
+package com.portalhacks.frame;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -59,7 +59,7 @@ public class PhotosActivity extends Activity {
     private static final String TAG = "PortalFrame";
     private static final int REQ_CAMERA = 1;
     private static final String SCREENSAVER_COMPONENT =
-            "com.example.portalframe/com.example.portalframe.FrameDreamService";
+            "com.portalhacks.frame/com.portalhacks.frame.FrameDreamService";
 
     private static final long[] DELAY_CHOICES = {4000L, 6000L, 10000L, 30000L, 60000L};
     private static final long[] FADE_CHOICES = {2000L, 1200L, 500L}; // Slow, Normal, Fast
@@ -147,7 +147,7 @@ public class PhotosActivity extends Activity {
         try {
             startActivity(new Intent(Settings.ACTION_DREAM_SETTINGS));
         } catch (Exception e) {
-            toast("Open Settings → Display → Screen saver, then choose Portal Frame");
+            toast("Open Settings → Display → Screen saver, then choose Frame");
         }
     }
 
@@ -202,8 +202,8 @@ public class PhotosActivity extends Activity {
         LinearLayout ssCard = Ui.card(this);
         ssCard.addView(Ui.sectionLabel(this, "Screensaver"));
         TextView ssBody = Ui.body(this, ssActive
-                ? "✓ Portal Frame is your screensaver. Your photos appear when the Portal is idle."
-                : "Almost there — tap below, then choose “Portal Frame” so your photos show "
+                ? "✓ Frame is your screensaver. Your photos appear when the Portal is idle."
+                : "Almost there — tap below, then choose “Frame” so your photos show "
                         + "when the Portal is idle.");
         topMargin(ssBody, 6);
         ssCard.addView(ssBody);

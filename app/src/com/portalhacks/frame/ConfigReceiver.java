@@ -1,4 +1,4 @@
-package com.example.portalframe;
+package com.portalhacks.frame;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -8,11 +8,11 @@ import android.util.Log;
 /**
  * Lets the Google Photos shared-album URL be set over ADB without rebuilding:
  *
- *   adb shell am broadcast -n com.example.portalframe/.ConfigReceiver \
+ *   adb shell am broadcast -n com.portalhacks.frame/.ConfigReceiver \
  *       --es url "https://photos.app.goo.gl/XXXXXXXX"
  *
  * Clear it (revert to bundled samples) with:
- *   adb shell am broadcast -n com.example.portalframe/.ConfigReceiver --es url ""
+ *   adb shell am broadcast -n com.portalhacks.frame/.ConfigReceiver --es url ""
  */
 public class ConfigReceiver extends BroadcastReceiver {
 
@@ -45,7 +45,7 @@ public class ConfigReceiver extends BroadcastReceiver {
     static final boolean DEFAULT_ENHANCE = true;
 
     // ADB-settable boolean extras (extra name -> pref key) for quick testing, e.g.
-    //   adb shell am broadcast -n com.example.portalframe/.ConfigReceiver --ez ken_burns false
+    //   adb shell am broadcast -n com.portalhacks.frame/.ConfigReceiver --ez ken_burns false
     private static final String[][] BOOL_EXTRAS = {
             {"shuffle", KEY_SHUFFLE}, {"pairs", KEY_PAIRS}, {"ken_burns", KEY_KEN_BURNS},
             {"clock", KEY_CLOCK}, {"night", KEY_NIGHT}, {"on_this_day", KEY_ON_THIS_DAY},
@@ -72,9 +72,18 @@ public class ConfigReceiver extends BroadcastReceiver {
         if (intent.hasExtra("url")) {
             String url = intent.getStringExtra("url");
             url = url == null ? "" : url.trim();
-            ed.putString(KEY_ALBUM, url);
-            Log.i("PortalFrame", "album_url set to: '" + url + "'");
-            any = true;
+            // This receiver is exported (so the album can be set over ADB), which means
+            // any installed app could broadcast to it. Only persist an empty value
+            // (clears the album, reverting to the bundled samples) or a real Google
+            // Photos HTTPS link; ignore anything else so a hostile broadcast can't point
+            // the frame at an arbitrary URL.
+            if (url.isEmpty() || isAlbumUrl(url)) {
+                ed.putString(KEY_ALBUM, url);
+                Log.i("PortalFrame", "album_url set to: '" + url + "'");
+                any = true;
+            } else {
+                Log.w("PortalFrame", "ignoring non-Google-Photos album_url");
+            }
         }
         for (String[] e : BOOL_EXTRAS) {
             if (intent.hasExtra(e[0])) {
@@ -87,5 +96,12 @@ public class ConfigReceiver extends BroadcastReceiver {
         if (any) {
             ed.apply();
         }
+    }
+
+    /** True for a Google Photos shared-album HTTPS link (the only URLs we'll fetch). */
+    static boolean isAlbumUrl(String s) {
+        return s != null
+                && (s.startsWith("https://photos.app.goo.gl/")
+                || s.startsWith("https://photos.google.com/share/"));
     }
 }

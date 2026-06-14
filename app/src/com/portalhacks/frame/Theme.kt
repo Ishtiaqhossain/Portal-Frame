@@ -1,4 +1,4 @@
-package com.example.portalframe
+package com.portalhacks.frame
 
 import android.content.Context
 import androidx.compose.material3.Typography
