@@ -58,6 +58,14 @@
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
             android:screenOrientation="landscape" />
 
+        <!-- Compose slideshow (migration Milestone 4) — develop/verify alongside the
+             Java MainActivity screensaver; becomes the dream target once at parity. -->
+        <activity
+            android:name=".SlideshowComposeActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:screenOrientation="landscape" />
+
         <!-- Set the Google Photos shared-album URL over ADB (see ConfigReceiver). -->
         <receiver
             android:name=".ConfigReceiver"
