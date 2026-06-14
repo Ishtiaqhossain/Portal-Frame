@@ -68,6 +68,15 @@ class SettingsActivity : ComponentActivity() {
     // slideshow's on-disk image cache).
     private val loader by lazy { ImageLoader(this) }
 
+    // Bumped on resume so the screen re-reads prefs after returning from the scanner /
+    // manual entry (the album may have changed there).
+    private val resumeTick = mutableIntStateOf(0)
+
+    override fun onResume() {
+        super.onResume()
+        resumeTick.intValue++
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -110,6 +119,7 @@ class SettingsActivity : ComponentActivity() {
     private fun SettingsScreen() {
         val ctx = LocalContext.current
         var tick by remember { mutableIntStateOf(0) } // bump to recompose after pref writes
+        resumeTick.intValue // read so returning from the scanner re-reads the album below
         val album = prefs.getString(ConfigReceiver.KEY_ALBUM, "") ?: ""
         val hasAlbum = album.isNotEmpty()
         tick // read so writes that bump it recompose

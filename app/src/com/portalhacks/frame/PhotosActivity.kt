@@ -4,9 +4,14 @@ import android.app.Activity
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
 import android.graphics.ImageFormat
+import android.graphics.Paint
+import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.graphics.drawable.Drawable
 import android.hardware.Camera
 import android.os.Bundle
 import android.os.Handler
@@ -32,6 +37,7 @@ import android.widget.Toast
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
 import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.common.GlobalHistogramBinarizer
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
 import java.util.EnumMap
@@ -409,14 +415,14 @@ class PhotosActivity : Activity() {
                     Log.i(TAG, "album_url set via manual entry: $url")
                     hideKeyboard(edit)
                     toast("Album set ✓")
-                    showStatus()
+                    finish() // back to the Compose settings screen (sticky Done + preview)
                 }
             },
         )
         col.addView(
             Ui.secondary(this, "Cancel") {
                 hideKeyboard(edit)
-                showStatus()
+                finish()
             },
         )
 
@@ -455,7 +461,7 @@ class PhotosActivity : Activity() {
                 showScanner()
             } else {
                 toast("Camera permission is needed to scan the QR code")
-                showStatus()
+                finish()
             }
         }
     }
@@ -472,12 +478,39 @@ class PhotosActivity : Activity() {
         this.surface = surface
         f.addView(surface, FrameLayout.LayoutParams(MATCH, MATCH))
 
+        val boxSize = Ui.dp(this, 340f)
+
+        // Black out everything except the centred box, so the camera preview only lights up
+        // that window (less glare in the room) and the user's eye goes to the target. Drawn as
+        // the view's *background* (always drawn) so it reliably composites over the camera
+        // SurfaceView — the same path the blue box border uses.
+        val mask = View(this)
+        mask.background = object : Drawable() {
+            private val paint = Paint().apply { color = Color.BLACK }
+            override fun draw(canvas: Canvas) {
+                val r = bounds
+                val half = boxSize / 2
+                val l = (r.centerX() - half).toFloat()
+                val t = (r.centerY() - half).toFloat()
+                val rt = (r.centerX() + half).toFloat()
+                val bt = (r.centerY() + half).toFloat()
+                canvas.drawRect(r.left.toFloat(), r.top.toFloat(), r.right.toFloat(), t, paint)
+                canvas.drawRect(r.left.toFloat(), bt, r.right.toFloat(), r.bottom.toFloat(), paint)
+                canvas.drawRect(r.left.toFloat(), t, l, bt, paint)
+                canvas.drawRect(rt, t, r.right.toFloat(), bt, paint)
+            }
+            override fun setAlpha(alpha: Int) {}
+            override fun setColorFilter(colorFilter: ColorFilter?) {}
+            @Deprecated("required override", ReplaceWith("PixelFormat.TRANSLUCENT"))
+            override fun getOpacity() = PixelFormat.TRANSLUCENT
+        }
+        f.addView(mask, FrameLayout.LayoutParams(MATCH, MATCH))
+
         // Centred target box (Portal blue) so the user knows where to aim the QR.
         val box = View(this)
         val border = Ui.roundRect(0x00000000, Ui.dp(this, 20f))
         border.setStroke(Ui.dp(this, 4f), Ui.BLUE)
         box.background = border
-        val boxSize = Ui.dp(this, 340f)
         val bp = FrameLayout.LayoutParams(boxSize, boxSize)
         bp.gravity = Gravity.CENTER
         f.addView(box, bp)
@@ -504,7 +537,7 @@ class PhotosActivity : Activity() {
         tp.leftMargin = Ui.dp(this, 28f)
         f.addView(typeLink, tp)
 
-        val cancel = Ui.secondary(this, "Cancel") { showStatus() }
+        val cancel = Ui.secondary(this, "Cancel") { finish() }
         val cp = FrameLayout.LayoutParams(WRAP, WRAP)
         cp.gravity = Gravity.BOTTOM or Gravity.END
         cp.bottomMargin = Ui.dp(this, 28f)
@@ -561,20 +594,29 @@ class PhotosActivity : Activity() {
                 pr.meteringAreas = areas
             }
             val step = pr.exposureCompensationStep
-            var comp = if (step > 0) {
-                Math.round(-2.0f / step)
-            } else {
-                pr.minExposureCompensation
-            }
-            comp = Math.max(
-                pr.minExposureCompensation,
-                Math.min(pr.maxExposureCompensation, comp),
-            )
+            var comp = if (step > 0) Math.round(-2.0f / step) else pr.minExposureCompensation
+            comp = Math.max(pr.minExposureCompensation, Math.min(pr.maxExposureCompensation, comp))
             pr.exposureCompensation = comp
+
+            // Autofocus makes a dense QR sharp — the single biggest factor for decoding. The
+            // camera was *assumed* fixed-focus; prefer continuous focus when it's actually offered.
+            val focusModes = pr.supportedFocusModes
+            when {
+                focusModes?.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE) == true ->
+                    pr.focusMode = Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE
+                focusModes?.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO) == true ->
+                    pr.focusMode = Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO
+                focusModes?.contains(Camera.Parameters.FOCUS_MODE_AUTO) == true ->
+                    pr.focusMode = Camera.Parameters.FOCUS_MODE_AUTO
+            }
             camera.parameters = pr
             Log.i(
                 TAG,
-                "QR scan: exposureComp=" + comp + " meteringAreas=" + pr.maxNumMeteringAreas,
+                "QR cam caps: focusModes=" + focusModes + " using=" + pr.focusMode +
+                    " preview=" + pr.previewSize.width + "x" + pr.previewSize.height + " maxPicture=" +
+                    pr.supportedPictureSizes.maxByOrNull { it.width * it.height }
+                        ?.let { "${it.width}x${it.height}" } +
+                    " hFov=" + pr.horizontalViewAngle + " zoom=" + pr.zoom + "/" + pr.maxZoom,
             )
 
             val ps = camera.parameters.previewSize
@@ -595,7 +637,7 @@ class PhotosActivity : Activity() {
         } catch (e: Exception) {
             Log.e(TAG, "camera open failed", e)
             toast("Couldn't open the camera")
-            showStatus()
+            finish()
         }
     }
 
@@ -630,16 +672,18 @@ class PhotosActivity : Activity() {
      * small/central code) normal + mirrored. Returns the text or null.
      */
     private fun tryDecode(data: ByteArray, w: Int, h: Int): String? {
-        var r = decodeRegion(data, w, h, 0, 0, w, h, false)
-        if (r == null) r = decodeRegion(data, w, h, 0, 0, w, h, true)
-        if (r == null) {
-            val side = (Math.min(w, h) * 0.6f).toInt()
+        decodeRegion(data, w, h, 0, 0, w, h, false)?.let { return it }
+        decodeRegion(data, w, h, 0, 0, w, h, true)?.let { return it }
+        // Centred crops: a QR aimed at the box covers only the middle of this ultra-wide
+        // frame, so cropping in gives it more pixels per module. Try a couple of sizes.
+        for (frac in floatArrayOf(0.6f, 0.4f)) {
+            val side = (Math.min(w, h) * frac).toInt()
             val left = (w - side) / 2
             val top = (h - side) / 2
-            r = decodeRegion(data, w, h, left, top, side, side, false)
-            if (r == null) r = decodeRegion(data, w, h, left, top, side, side, true)
+            decodeRegion(data, w, h, left, top, side, side, false)?.let { return it }
+            decodeRegion(data, w, h, left, top, side, side, true)?.let { return it }
         }
-        return r
+        return null
     }
 
     private fun decodeRegion(
@@ -652,15 +696,23 @@ class PhotosActivity : Activity() {
         rh: Int,
         mirror: Boolean,
     ): String? {
-        return try {
-            val src = PlanarYUVLuminanceSource(data, w, h, left, top, rw, rh, mirror)
-            val res = reader.decode(BinaryBitmap(HybridBinarizer(src)), HINTS)
-            res.text
-        } catch (notFound: Exception) {
-            null
-        } finally {
-            reader.reset()
+        val src = try {
+            PlanarYUVLuminanceSource(data, w, h, left, top, rw, rh, mirror)
+        } catch (e: Exception) {
+            return null
         }
+        // Hybrid binarizer is best for sharp images; the global-histogram one sometimes wins on
+        // the soft, low-contrast frames this fixed-focus wide camera produces. Try both.
+        for (bin in arrayOf(HybridBinarizer(src), GlobalHistogramBinarizer(src))) {
+            try {
+                return reader.decode(BinaryBitmap(bin), HINTS).text
+            } catch (notFound: Exception) {
+                // try the next binarizer
+            } finally {
+                reader.reset()
+            }
+        }
+        return null
     }
 
     private fun onQr(text: String?) {
@@ -675,7 +727,7 @@ class PhotosActivity : Activity() {
         stopCamera()
         scanHint?.text = "Album set ✓ — your photos will appear shortly"
         toast("Album set ✓")
-        main.postDelayed({ showStatus() }, 1500)
+        main.postDelayed({ finish() }, 1500)
     }
 
     private fun stopCamera() {
