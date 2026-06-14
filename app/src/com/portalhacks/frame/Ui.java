@@ -269,12 +269,8 @@ final class Ui {
      * side-by-side panes. Returns {left, right}; add cards to either.
      */
     static LinearLayout[] twoColumns(Context c, LinearLayout parent) {
-        // Side-by-side only when wide enough (Portal Go/+ landscape); on the original
-        // Portal's portrait screen and the small Mini, stack the panes vertically.
-        boolean wide = c.getResources().getDisplayMetrics().widthPixels >= dp(c, 820);
-
         LinearLayout row = new LinearLayout(c);
-        row.setOrientation(wide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rlp.topMargin = dp(c, 8);
@@ -282,20 +278,14 @@ final class Ui {
 
         LinearLayout left = new LinearLayout(c);
         left.setOrientation(LinearLayout.VERTICAL);
-        left.setLayoutParams(wide
-                ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                : new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        left.setLayoutParams(new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         LinearLayout right = new LinearLayout(c);
         right.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams rp = wide
-                ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                : new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        if (wide) {
-            rp.leftMargin = dp(c, 24);
-        }
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        rp.leftMargin = dp(c, 24);
         right.setLayoutParams(rp);
 
         row.addView(left);
