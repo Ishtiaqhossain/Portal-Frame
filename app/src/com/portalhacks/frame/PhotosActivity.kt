@@ -79,6 +79,8 @@ class PhotosActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Pan the screen up when the on-screen keyboard appears so the link field stays visible.
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN)
         root = FrameLayout(this)
         root.setBackgroundColor(Ui.BG)
         setContentView(root)
@@ -380,9 +382,16 @@ class PhotosActivity : Activity() {
     // ------------------------------------------------ Manual entry
 
     /** Type/paste the album link using the on-screen keyboard (QR-less fallback). */
-    /** Validate the pasted link and add it to the album list (from the scanner panel). */
+    /**
+     * "Done" on the add screen: add the pasted link (if any) and close. An empty field just
+     * closes (e.g. after a QR scan already added one); an invalid link warns and stays.
+     */
     private fun addTypedAlbum(edit: EditText) {
         val url = edit.text.toString().trim()
+        if (url.isEmpty()) {
+            finish()
+            return
+        }
         if (!isPhotosLink(url)) {
             toast("That doesn't look like a Google Photos or iCloud link")
             return
@@ -392,6 +401,25 @@ class PhotosActivity : Activity() {
         hideKeyboard(edit)
         toast("Album added ✓")
         finish() // back to the Compose settings screen
+    }
+
+    /** A compact, content-width filled button (not full-bleed like the card buttons). */
+    private fun pillButton(label: String, fill: Int, textColor: Int, onClick: () -> Unit): Button {
+        val b = Button(this)
+        b.text = label
+        b.isAllCaps = false
+        b.typeface = Ui.medium(this)
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+        b.setTextColor(textColor)
+        val h = Ui.dp(this, 56f)
+        b.minHeight = h
+        b.minimumHeight = h
+        b.stateListAnimator = null
+        val padH = Ui.dp(this, 36f)
+        b.setPadding(padH, 0, padH, 0)
+        b.background = Ui.roundRect(fill, Ui.dp(this, 14f))
+        b.setOnClickListener { onClick() }
+        return b
     }
 
     private fun hideKeyboard(v: View) {
@@ -438,7 +466,7 @@ class PhotosActivity : Activity() {
         this.surface = surface
         f.addView(surface, FrameLayout.LayoutParams(MATCH, MATCH))
 
-        val boxSize = Ui.dp(this, 340f)
+        val boxSize = Ui.dp(this, 300f)
 
         // Black out everything except the centred box, so the camera preview only lights up
         // that window (less glare in the room) and the user's eye goes to the target. Drawn as
@@ -475,44 +503,57 @@ class PhotosActivity : Activity() {
         bp.gravity = Gravity.CENTER
         f.addView(box, bp)
 
-        val scanHint = TextView(this)
-        this.scanHint = scanHint
-        scanHint.text = "Make the QR fill your phone screen at full brightness, then hold it " +
-            "about half a meter away — sharp and filling the blue box. Hold steady."
-        scanHint.setTextColor(0xFFF0F0F0.toInt())
-        scanHint.typeface = Ui.medium(this)
-        scanHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-        scanHint.gravity = Gravity.CENTER_HORIZONTAL
-        scanHint.setLineSpacing(Ui.dp(this, 4f).toFloat(), 1f)
-        scanHint.setShadowLayer(8f, 0f, 1f, Color.BLACK)
-        val hp = FrameLayout.LayoutParams(Ui.dp(this, 620f), WRAP)
-        hp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        hp.topMargin = Ui.dp(this, 72f) // clear the top system overlay
-        f.addView(scanHint, hp)
+        // Centred max-width columns so nothing spans the whole screen.
+        val colW = Math.min(Ui.dp(this, 640f), resources.displayMetrics.widthPixels - Ui.dp(this, 48f))
 
-        // Single add-album UI: scan the QR above, or paste a link in this panel.
-        val panel = LinearLayout(this)
-        panel.orientation = LinearLayout.VERTICAL
-        panel.setBackgroundColor(0xE6101010.toInt()) // legible over the camera
-        val padH = Ui.dp(this, 24f)
-        panel.setPadding(padH, Ui.dp(this, 16f), padH, Ui.dp(this, 20f))
-        val panelLp = FrameLayout.LayoutParams(MATCH, WRAP)
-        panelLp.gravity = Gravity.BOTTOM
-        panel.layoutParams = panelLp
+        // Top: screen title + a subtitle that doubles as scan feedback.
+        val topCol = LinearLayout(this)
+        topCol.orientation = LinearLayout.VERTICAL
+        topCol.gravity = Gravity.CENTER_HORIZONTAL
+        val title = TextView(this)
+        title.text = "Add an album"
+        title.setTextColor(0xFFF0F0F0.toInt())
+        title.typeface = Ui.bold(this)
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
+        title.gravity = Gravity.CENTER_HORIZONTAL
+        title.setShadowLayer(8f, 0f, 1f, Color.BLACK)
+        topCol.addView(title)
+        val subtitle = TextView(this)
+        this.scanHint = subtitle // reused for "that QR isn't…/Album added ✓" feedback
+        subtitle.text = "Scan its QR code in the box, or paste a link below."
+        subtitle.setTextColor(0xFFD2D2D2.toInt())
+        subtitle.typeface = Ui.medium(this)
+        subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+        subtitle.gravity = Gravity.CENTER_HORIZONTAL
+        subtitle.setLineSpacing(Ui.dp(this, 3f).toFloat(), 1f)
+        subtitle.setShadowLayer(8f, 0f, 1f, Color.BLACK)
+        val subLp = LinearLayout.LayoutParams(MATCH, WRAP)
+        subLp.topMargin = Ui.dp(this, 6f)
+        topCol.addView(subtitle, subLp)
+        val topLp = FrameLayout.LayoutParams(colW, WRAP)
+        topLp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        topLp.topMargin = Ui.dp(this, 56f)
+        f.addView(topCol, topLp)
 
-        panel.addView(Ui.body(this, "Can’t scan? Paste a Google Photos or iCloud link:"))
-
-        val edit = Ui.field(this, "https://photos.app.goo.gl/…  or  https://www.icloud.com/sharedalbum/#…")
+        // Bottom: paste a link + a compact Done button.
+        val bottomCol = LinearLayout(this)
+        bottomCol.orientation = LinearLayout.VERTICAL
+        val edit = Ui.field(this, "Paste a Google Photos or iCloud link")
         edit.setSingleLine(true)
         edit.inputType = InputType.TYPE_CLASS_TEXT or
             InputType.TYPE_TEXT_VARIATION_URI or
             InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        panel.addView(edit)
-
-        panel.addView(Ui.primary(this, "Add album") { addTypedAlbum(edit) })
-        panel.addView(Ui.secondary(this, "Cancel") { finish() })
-
-        f.addView(panel)
+        bottomCol.addView(edit)
+        val done = pillButton("Done", Ui.BLUE, 0xFFF0F0F0.toInt()) { addTypedAlbum(edit) }
+        val doneLp = LinearLayout.LayoutParams(WRAP, WRAP)
+        doneLp.topMargin = Ui.dp(this, 14f)
+        doneLp.gravity = Gravity.END
+        done.layoutParams = doneLp
+        bottomCol.addView(done)
+        val bottomLp = FrameLayout.LayoutParams(colW, WRAP)
+        bottomLp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        bottomLp.bottomMargin = Ui.dp(this, 40f)
+        f.addView(bottomCol, bottomLp)
 
         root.addView(f)
 
