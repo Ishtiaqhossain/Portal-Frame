@@ -1,192 +1,239 @@
 package com.portalhacks.frame
 
-import android.content.Context
-import android.graphics.Bitmap
+import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import kotlin.coroutines.resume
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
+import androidx.compose.ui.viewinterop.AndroidView
+import java.util.Calendar
 
 /**
- * Compose port of the slideshow core (migration Milestone 4): crossfade + cinematic
- * Ken Burns + a clock overlay, reusing the Java {@link ImageLoader} (which already
- * screen-fills each bitmap). Developed as a separate activity so the verified Java
- * screensaver path stays intact; once it reaches feature parity it becomes the dream
- * target. Currently drives the bundled sample slides.
+ * The live slideshow screensaver, hosted in Jetpack Compose.
+ *
+ * The slideshow's rendering is a deeply imperative, custom-animated View stack —
+ * crossfading [android.widget.ImageView]s, a [android.animation.ValueAnimator]
+ * Ken Burns engine, a `Canvas` shimmer, an `ImageSpan` weather glyph, distance-based
+ * touch gestures — exactly the case Compose's `AndroidView` interop exists for. So we
+ * keep the battle-tested [SlideshowController] and bridge it into `setContent`, rather
+ * than re-deriving the animation engine in Compose (which would risk regressing the
+ * marquee features for no user-facing gain). The album fetch/cache/refresh and
+ * night-dimming logic live here in Kotlin.
+ *
+ * This is the screensaver target ([FrameDreamService] launches it).
  */
 class SlideshowComposeActivity : ComponentActivity() {
+
+    private lateinit var loader: ImageLoader
+    private lateinit var controller: SlideshowController
+    private val handler = Handler(Looper.getMainLooper())
+
+    private var albumUrl = ""
+    private var currentIds: List<String> = ArrayList()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
                 or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-                or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
+                or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                or WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
         )
-        setContent { Slideshow(onTap = { finish() }) }
+
+        loader = ImageLoader(this)
+        // Build the slideshow's View hierarchy, then host it inside Compose.
+        val root = FrameLayout(this)
+        controller = SlideshowController(this, root, loader).apply {
+            setOnDismiss {
+                val home = Intent(Intent.ACTION_MAIN)
+                home.addCategory(Intent.CATEGORY_HOME)
+                home.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                startActivity(home)
+                finish()
+            }
+            // Portal's launcher won't show sideloaded app icons, so long-press the
+            // slideshow to reach the setup/settings screen.
+            setOnSettings {
+                startActivity(Intent(this@SlideshowComposeActivity, SettingsActivity::class.java))
+            }
+        }
+        setContent {
+            AndroidView(factory = { root }, modifier = Modifier.fillMaxSize())
+        }
     }
-}
 
-private const val HOLD_MS = 6000
-private const val FADE_MS = 1200
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                )
+        }
+    }
 
-private data class Kb(
-    val s0: Float, val s1: Float,
-    val tx0: Float, val tx1: Float, val ty0: Float, val ty1: Float,
-) {
-    fun scale(f: Float) = s0 + (s1 - s0) * f
-    fun tx(f: Float) = tx0 + (tx1 - tx0) * f
-    fun ty(f: Float) = ty0 + (ty1 - ty0) * f
+    override fun onResume() {
+        super.onResume()
+        // Clear any photo retained from a previous run so re-entering the frame
+        // doesn't flash the old image before the first new frame loads.
+        controller.blank()
+        startDimming() // ease screen brightness down at night, up in the morning
+        val prefs = getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE)
+        albumUrl = prefs.getString(ConfigReceiver.KEY_ALBUM, "") ?: ""
+
+        if (albumUrl.isEmpty()) {
+            // No album configured: show the bundled samples.
+            controller.start()
+            return
+        }
+
+        // Album configured: start straight from the cached album if we have it
+        // (disk-cached images make the first photo appear near-instantly);
+        // otherwise show a black "Loading…" screen — never the samples.
+        val cached = AlbumCache.read(prefs, albumUrl)
+        if (cached != null && cached.isNotEmpty()) {
+            currentIds = idsOf(cached)
+            controller.setItems(cached)
+        } else {
+            currentIds = ArrayList()
+            controller.setStatusHint("Loading Google Photos…")
+        }
+
+        // Refresh now, then keep checking periodically while we're on screen.
+        fetchAndApply(cached == null || cached.isEmpty())
+        handler.removeCallbacks(refreshTick)
+        handler.postDelayed(refreshTick, REFRESH_INTERVAL_MS)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        handler.removeCallbacks(refreshTick)
+        handler.removeCallbacks(dimTick)
+        controller.stop()
+    }
+
+    // --- night dimming -------------------------------------------------------
+
+    private val dimTick = object : Runnable {
+        override fun run() {
+            applyBrightness()
+            handler.postDelayed(this, DIM_INTERVAL_MS)
+        }
+    }
+
+    private fun startDimming() {
+        handler.removeCallbacks(dimTick)
+        applyBrightness()
+        handler.postDelayed(dimTick, DIM_INTERVAL_MS)
+    }
+
+    /** Set this window's brightness from the time of day (doesn't touch system settings). */
+    private fun applyBrightness() {
+        val c = Calendar.getInstance()
+        val h = c.get(Calendar.HOUR_OF_DAY) + c.get(Calendar.MINUTE) / 60f
+        val lp = window.attributes
+        lp.screenBrightness = brightnessForHour(h)
+        window.attributes = lp
+    }
+
+    private val refreshTick = object : Runnable {
+        override fun run() {
+            fetchAndApply(false)
+            handler.postDelayed(this, REFRESH_INTERVAL_MS)
+        }
+    }
+
+    /**
+     * Fetch the album in the background; on success persist it and apply it only
+     * if the photo set actually changed (avoids a redundant restart/flicker).
+     */
+    private fun fetchAndApply(showHint: Boolean) {
+        val url = albumUrl
+        if (url.isEmpty()) {
+            return
+        }
+        loader.executor().execute {
+            try {
+                val album = GooglePhotosSource.fetch(url)
+                val photos = album.slides
+                runOnUiThread {
+                    if (url != albumUrl) {
+                        return@runOnUiThread // album changed while fetching
+                    }
+                    if (photos.isEmpty()) {
+                        if (showHint) {
+                            controller.setStatusHint(
+                                "Album returned no photos (check sharing/link)",
+                            )
+                        }
+                        return@runOnUiThread
+                    }
+                    AlbumCache.write(
+                        getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE),
+                        url, photos, album.title,
+                    )
+                    val newIds = idsOf(photos)
+                    if (newIds != currentIds) {
+                        currentIds = newIds
+                        controller.setItems(photos)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "album fetch failed", e)
+                if (showHint) {
+                    runOnUiThread {
+                        controller.setStatusHint("Couldn't load album — retrying later")
+                    }
+                }
+            }
+        }
+    }
 
     companion object {
-        fun random(w: Int, h: Int): Kb {
-            fun z() = 1.08f + Math.random().toFloat() * 0.10f
-            val s0 = z(); val s1 = z()
-            val minS = minOf(s0, s1)
-            val sx = (minS - 1f) / 2f * w * 0.9f
-            val sy = (minS - 1f) / 2f * h * 0.9f
-            fun r(s: Float) = ((Math.random().toFloat() * 2f) - 1f) * s
-            return Kb(s0, s1, r(sx), r(sx), r(sy), r(sy))
+        private const val TAG = "PortalFrame"
+        private const val REFRESH_INTERVAL_MS = 20 * 60 * 1000L // 20 min
+        private const val DIM_INTERVAL_MS = 5 * 60 * 1000L // re-check brightness
+
+        /**
+         * Full brightness through the day, eased down to a soft glow overnight so the
+         * frame isn't a lighthouse in a dark room. Ramps 21:00→23:00 down and
+         * 06:00→08:00 up; deep night 23:00→06:00.
+         */
+        private fun brightnessForHour(h: Float): Float {
+            val day = 1.0f
+            val night = 0.07f
+            if (h >= 8f && h < 21f) {
+                return day
+            }
+            if (h >= 21f && h < 23f) {
+                return lerp(day, night, (h - 21f) / 2f)
+            }
+            if (h >= 23f || h < 6f) {
+                return night
+            }
+            return lerp(night, day, (h - 6f) / 2f) // 06:00–08:00
+        }
+
+        private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+
+        private fun idsOf(slides: List<Slide>): List<String> {
+            val ids = ArrayList<String>(slides.size)
+            for (s in slides) {
+                ids.add(s.id)
+            }
+            return ids
         }
     }
-}
-
-private suspend fun ImageLoader.loadBitmap(id: String, w: Int, h: Int): Bitmap? =
-    suspendCancellableCoroutine { cont ->
-        load(id, w, h) { bmp -> if (cont.isActive) cont.resume(bmp) }
-    }
-
-@Composable
-private fun Slideshow(onTap: () -> Unit) {
-    val context = LocalContext.current
-    val dm = context.resources.displayMetrics
-    val w = if (dm.widthPixels > 0) dm.widthPixels else 1280
-    val h = if (dm.heightPixels > 0) dm.heightPixels else 800
-    val loader = remember { ImageLoader(context) }
-    val items = remember { assetSlides(context) }
-
-    var back by remember { mutableStateOf<Bitmap?>(null) }
-    var front by remember { mutableStateOf<Bitmap?>(null) }
-    val frontAlpha = remember { Animatable(0f) }
-    val kbFrac = remember { Animatable(0f) }
-    var kb by remember { mutableStateOf(Kb.random(w, h)) }
-
-    var clock by remember { mutableStateOf(currentTime(context)) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            clock = currentTime(context)
-            delay(1000L * (60 - (System.currentTimeMillis() / 1000 % 60)))
-        }
-    }
-
-    LaunchedEffect(items) {
-        if (items.isEmpty()) return@LaunchedEffect
-        back = loader.loadBitmap(items[0], w, h)
-        kb = Kb.random(w, h)
-        var kbJob = launch { kbFrac.snapTo(0f); kbFrac.animateTo(1f, tween(HOLD_MS + FADE_MS, easing = LinearEasing)) }
-        var i = 0
-        while (true) {
-            delay(HOLD_MS.toLong())
-            val next = (i + 1) % items.size
-            val bmp = loader.loadBitmap(items[next], w, h)
-            if (bmp == null) { i = next; continue }
-            front = bmp
-            frontAlpha.snapTo(0f)
-            val nextKb = Kb.random(w, h)
-            frontAlpha.animateTo(1f, tween(FADE_MS, easing = LinearEasing)) // crossfade
-            back = bmp
-            front = null
-            frontAlpha.snapTo(0f)
-            kb = nextKb
-            kbJob.cancel()
-            kbJob = launch { kbFrac.snapTo(0f); kbFrac.animateTo(1f, tween(HOLD_MS + FADE_MS, easing = LinearEasing)) }
-            i = next
-        }
-    }
-
-    Box(
-        Modifier.fillMaxSize().background(Color.Black).clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-        ) { onTap() },
-        contentAlignment = Alignment.BottomStart,
-    ) {
-        back?.let {
-            Image(
-                bitmap = it.asImageBitmap(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().graphicsLayer {
-                    val f = kbFrac.value
-                    scaleX = kb.scale(f); scaleY = kb.scale(f)
-                    translationX = kb.tx(f); translationY = kb.ty(f)
-                },
-            )
-        }
-        front?.let {
-            Image(
-                bitmap = it.asImageBitmap(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = frontAlpha.value },
-            )
-        }
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0.7f to Color.Transparent, 1f to Color(0xB3000000)),
-            ),
-        )
-        Text(
-            clock, color = Color.White, fontSize = 80.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 28.dp, bottom = 95.dp),
-        )
-    }
-}
-
-private fun assetSlides(context: Context): List<String> = try {
-    (context.assets.list("slides") ?: emptyArray())
-        .filter {
-            val l = it.lowercase()
-            l.endsWith(".png") || l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".webp")
-        }
-        .sorted()
-        .map { "slides/$it" }
-} catch (_: Exception) {
-    emptyList()
-}
-
-private fun currentTime(context: Context): String {
-    val pattern = if (android.text.format.DateFormat.is24HourFormat(context)) "H:mm" else "h:mm"
-    return java.text.SimpleDateFormat(pattern, java.util.Locale.getDefault()).format(java.util.Date())
 }

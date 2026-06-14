@@ -33,10 +33,16 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## Architecture
 
 - **`FrameDreamService`** — the registered screensaver; a thin trampoline that launches
-  `MainActivity` and finishes. (Portal's ambient manager kills interactive in-dream windows, so
-  the slideshow runs as a normal foreground Activity instead — see the README "trampoline" note.)
-- **`MainActivity` + `SlideshowController`** (Kotlin, Android Views) — the actual full-screen
-  slideshow: crossfade, clock/weather overlay, captions, Ken Burns, ambient color, night dimming.
+  `SlideshowComposeActivity` and finishes. (Portal's ambient manager kills interactive in-dream
+  windows, so the slideshow runs as a normal foreground Activity instead — see the README
+  "trampoline" note.)
+- **`SlideshowComposeActivity` + `SlideshowController`** (Kotlin) — the actual full-screen
+  slideshow and the dream target. The Activity is Compose (`setContent`) and hosts the
+  view-based `SlideshowController` via `AndroidView` (the controller's crossfade / Ken Burns
+  `ValueAnimator` / `Canvas` shimmer are imperative custom animation, best kept as Views); the
+  Activity owns the album fetch/cache/refresh + night-dimming logic. Features: crossfade,
+  clock/weather overlay, captions, Ken Burns, face-aware framing, ambient color, auto-enhance,
+  night dimming, smart shuffle, On This Day, portrait pairing.
 - **`SettingsActivity`** (Kotlin/Compose) — the home-icon ("Frame") setup/settings screen. Hands
   off to `PhotosActivity` for the camera scanner / manual link entry.
 - **`PhotosActivity`** (Kotlin, Android Views) — camera QR scanner + manual entry (ZXing, vendored jar).
@@ -57,7 +63,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
   `lh3.googleusercontent.com`; it's unofficial and must fail closed (fall back to bundled samples).
 - `ConfigReceiver` is exported (for ADB) but validates the album URL — keep that validation.
 - Do **not** commit secrets, `local.properties`, keystores, or build output (see `.gitignore`).
-- The codebase is fully Kotlin. The Compose-ification of the UI is partial: settings is Compose,
-  while the slideshow (`MainActivity`/`SlideshowController`) and scanner (`PhotosActivity`) are
-  Kotlin + Android Views. The view-based `MainActivity` is still the live dream target;
-  `SlideshowComposeActivity` is a Compose port developed alongside it (not yet at parity).
+- The codebase is fully Kotlin and every Activity is Compose (`setContent`). `SettingsActivity`
+  is native Compose; `SlideshowComposeActivity` (the live dream target) is Compose hosting the
+  imperative `SlideshowController` View stack via `AndroidView`, and `PhotosActivity` (scanner)
+  is still a view-based screen. `SlideshowController`/`Ui` remain Android Views by design (custom
+  animation / canvas drawing); that's the intended end state, not a pending migration.

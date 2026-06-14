@@ -7,6 +7,10 @@ touches like a clock, captions, cinematic motion, and ambient color.
 
 > Project/repo name: **PortalFrame** (`com.portalhacks.frame`). The app displays as **Frame**.
 
+**Just want to set it up on a Portal?** See the end-user **[Install & User Guide](INSTALL.md)**
+(install a provided APK, add your album, turn it on as the screensaver). The rest of this README
+is for developers.
+
 ## License & contributing
 Released under the [MIT License](LICENSE); third-party attributions are in [NOTICE](NOTICE).
 See [CONTRIBUTING.md](CONTRIBUTING.md) to build and contribute, and [SECURITY.md](SECURITY.md)

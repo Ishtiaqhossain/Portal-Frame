@@ -9,8 +9,8 @@ import org.json.JSONObject
 
 /**
  * Persists the fetched Google Photos album (photo list + title) to the shared
- * `portalframe` prefs so both the slideshow ([MainActivity]) and the settings
- * preview (`SettingsActivity`) can start from it without re-fetching.
+ * `portalframe` prefs so both the slideshow (`SlideshowComposeActivity`) and the
+ * settings preview (`SettingsActivity`) can start from it without re-fetching.
  *
  * Stored as JSON (no raw newlines/tabs) so the value survives SharedPreferences'
  * XML round-trip intact — a delimiter-based blob got corrupted by control-char

@@ -15,17 +15,6 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:allowBackup="false">
 
-        <!-- Foreground / kiosk slideshow. Not a LAUNCHER entry: Portal's launcher
-             would then show a second icon, and the slideshow is reached via the
-             screensaver (FrameDreamService) or a long-press on it. Started via
-             the dream, the "Photos" setup screen, or `am start` for testing. -->
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:theme="@style/Theme.Frame"
-            android:excludeFromRecents="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
-
         <!-- The real screensaver path: a standard Android DreamService that
              Portal's Daydream framework can be pointed at. -->
         <service
@@ -60,12 +49,15 @@
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
 
-        <!-- Compose slideshow (migration Milestone 4) — develop/verify alongside the
-             Java MainActivity screensaver; becomes the dream target once at parity. -->
+        <!-- The live slideshow screensaver (Compose-hosted, full feature parity).
+             FrameDreamService launches this; also reached via long-press from itself.
+             Theme.Frame + excludeFromRecents prevent the stale-snapshot flash on
+             re-entry; configChanges lets it follow the device's natural orientation. -->
         <activity
             android:name=".SlideshowComposeActivity"
             android:exported="true"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:theme="@style/Theme.Frame"
+            android:excludeFromRecents="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
 
         <!-- Set the Google Photos shared-album URL over ADB (see ConfigReceiver). -->
