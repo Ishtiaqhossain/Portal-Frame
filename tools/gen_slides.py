@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""Generate sample slide PNGs (vertical gradient + big white slide number).
-Pure stdlib (zlib + struct), no PIL required. Output: app/assets/slides/."""
+"""Generate placeholder sample slides (vertical gradient + big white slide number).
+Pure stdlib (zlib + struct), no PIL required. Output: app/assets/slides/.
+
+NOTE: the app now ships real bundled nature photos in app/assets/slides (see
+docs/credits / NOTICE). This generator is only a fallback for an empty slides
+directory — it SKIPS generation if any image is already present, so it never
+clobbers the committed photos."""
 import zlib, struct, os, sys
 
 W, H = 1280, 800  # landscape, matching Portal Go's natural orientation
@@ -8,6 +13,12 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
     os.path.dirname(__file__), "..", "app", "assets", "slides")
 OUT = os.path.abspath(OUT)
 os.makedirs(OUT, exist_ok=True)
+
+# Don't overwrite the bundled photos: only generate when the dir has no images.
+_exts = (".jpg", ".jpeg", ".png", ".webp")
+if any(f.lower().endswith(_exts) for f in os.listdir(OUT)):
+    print("slides present, skipping placeholder generation ->", OUT)
+    sys.exit(0)
 
 # 3x5 block font, just the digits we need.
 FONT = {
