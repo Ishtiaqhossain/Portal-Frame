@@ -172,15 +172,20 @@ public class PhotosActivity extends Activity {
         stopArmed = false;
         showingStatus = true;
         root.removeAllViews();
-        LinearLayout col = Ui.screen(this, root);
+        LinearLayout col = Ui.screen(this, root, Ui.MAX_W_WIDE_DP);
 
         final String url = album();
         final boolean hasAlbum = url != null && !url.isEmpty();
 
         col.addView(Ui.title(this, hasAlbum ? "Your photos" : "Show your Google Photos"));
 
-        // Screensaver setup — the slideshow only runs once "Portal Frame" is chosen
-        // in the system Screen-saver picker (a normal app can't set this itself).
+        LinearLayout[] panes = Ui.twoColumns(this, col);
+        LinearLayout left = panes[0];
+        LinearLayout right = panes[1];
+
+        // ---------------------------------------------------- LEFT: Source
+        // Screensaver — the slideshow only runs once "Portal Frame" is chosen in
+        // the system picker (a normal app can't set this itself).
         final boolean ssActive = isOurScreensaver();
         LinearLayout ssCard = Ui.card(this);
         ssCard.addView(Ui.sectionLabel(this, "Screensaver"));
@@ -190,45 +195,37 @@ public class PhotosActivity extends Activity {
                         + "when the Portal is idle.");
         topMargin(ssBody, 6);
         ssCard.addView(ssBody);
-        col.addView(ssCard);
-        col.addView(ssActive
-                ? Ui.secondary(this, "Change screensaver", new Runnable() {
+        ssCard.addView(ssActive
+                ? Ui.outline(this, "Change screensaver", new Runnable() {
                     @Override public void run() { openScreensaverSettings(); }
                 })
                 : Ui.primary(this, "Use as screensaver", new Runnable() {
                     @Override public void run() { openScreensaverSettings(); }
                 }));
+        left.addView(ssCard);
 
+        // Album
+        LinearLayout albumCard = Ui.card(this);
+        albumCard.addView(Ui.sectionLabel(this, hasAlbum ? "Album" : "No album yet"));
         if (hasAlbum) {
-            LinearLayout card = Ui.card(this);
-            card.addView(Ui.sectionLabel(this, "Now showing"));
             TextView u = Ui.body(this, url);
             u.setTextColor(Ui.BLUE);
-            u.setTypeface(Ui.medium(this));
-            LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(MATCH, WRAP);
-            ulp.topMargin = Ui.dp(this, 6);
-            u.setLayoutParams(ulp);
-            card.addView(u);
-            col.addView(card);
+            u.setSingleLine(true);
+            u.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            topMargin(u, 6);
+            albumCard.addView(u);
+        } else {
+            TextView none = Ui.body(this,
+                    "Add a Google Photos shared album to show your own photos.");
+            topMargin(none, 6);
+            albumCard.addView(none);
         }
-
-        TextView howto = Ui.body(this,
-                "On your phone: open Google Photos, open the album you want, tap Share, and "
-                        + "choose Create link / show its QR code. Then tap "
-                        + (hasAlbum ? "Change album" : "Add album")
-                        + " and hold your phone up to this screen.\n\n"
-                        + "Tip: the album must be shared by link so the frame can see it.");
-        topMargin(howto, 16);
-        col.addView(howto);
-
-        col.addView(Ui.primary(this, hasAlbum ? "Change album" : "Add album", new Runnable() {
+        albumCard.addView(Ui.primary(this, hasAlbum ? "Change album" : "Add album", new Runnable() {
             @Override public void run() { startScan(); }
         }));
-
-        col.addView(Ui.secondary(this, "Enter link manually", new Runnable() {
+        albumCard.addView(Ui.outline(this, "Enter link manually", new Runnable() {
             @Override public void run() { showManualEntry(); }
         }));
-
         if (hasAlbum) {
             final Button stop = Ui.destructive(this, "Stop showing photos", null);
             stop.setOnClickListener(new View.OnClickListener() {
@@ -244,56 +241,68 @@ public class PhotosActivity extends Activity {
                     }
                 }
             });
-            col.addView(stop);
+            albumCard.addView(stop);
         }
+        left.addView(albumCard);
 
-        TextView section = Ui.sectionLabel(this, "Slideshow");
-        topMargin(section, 32);
-        col.addView(section);
+        // ------------------------------------------------- RIGHT: Slideshow
+        LinearLayout slideCard = Ui.card(this);
+        slideCard.addView(Ui.sectionLabel(this, "Slideshow"));
 
-        final Button delayBtn = Ui.secondary(this, delayLabel(), null);
-        delayBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        final View delayRow = Ui.row(this, "Seconds per photo", fmtDelay(getDelay()), null);
+        delayRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
                 long next = cycle(DELAY_CHOICES, getDelay(), 0);
                 prefs().edit().putLong(ConfigReceiver.KEY_DELAY_MS, next).apply();
-                delayBtn.setText("Seconds per photo:  " + fmtDelay(next));
+                Ui.setRowValue(delayRow, fmtDelay(next));
             }
         });
-        col.addView(delayBtn);
+        topMargin(delayRow, 8);
+        slideCard.addView(delayRow);
+        slideCard.addView(Ui.hairline(this));
 
-        final Button shuffleBtn = Ui.secondary(this, shuffleLabel(), null);
-        shuffleBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        final View shuffleRow = Ui.row(this, "Shuffle photos", getShuffle() ? "On" : "Off", null);
+        shuffleRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
                 boolean next = !getShuffle();
                 prefs().edit().putBoolean(ConfigReceiver.KEY_SHUFFLE, next).apply();
-                shuffleBtn.setText("Shuffle photos:  " + (next ? "On" : "Off"));
+                Ui.setRowValue(shuffleRow, next ? "On" : "Off");
             }
         });
-        col.addView(shuffleBtn);
+        slideCard.addView(shuffleRow);
+        slideCard.addView(Ui.hairline(this));
 
-        final Button fadeBtn = Ui.secondary(this, fadeBtnLabel(), null);
-        fadeBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        final View fadeRow = Ui.row(this, "Transition", fadeLabel(getFade()), null);
+        fadeRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
                 long next = cycle(FADE_CHOICES, getFade(), 1);
                 prefs().edit().putLong(ConfigReceiver.KEY_FADE_MS, next).apply();
-                fadeBtn.setText("Transition:  " + fadeLabel(next));
+                Ui.setRowValue(fadeRow, fadeLabel(next));
             }
         });
-        col.addView(fadeBtn);
+        slideCard.addView(fadeRow);
+        right.addView(slideCard);
 
+        // Tips
+        LinearLayout tipsCard = Ui.card(this);
+        tipsCard.addView(Ui.sectionLabel(this, "Tips"));
+        TextView howto = Ui.body(this,
+                "On your phone: open Google Photos, open the album you want, tap Share, and "
+                        + "choose Create link / show its QR code. Then tap "
+                        + (hasAlbum ? "Change album" : "Add album")
+                        + " here and hold your phone up to this screen.\n\n"
+                        + "Tip: the album must be shared by link so the frame can see it.");
+        topMargin(howto, 6);
+        tipsCard.addView(howto);
+        right.addView(tipsCard);
+
+        // ----------------------------------------------------------- Done
         Button done = Ui.secondary(this, "Done", new Runnable() {
             @Override public void run() { finish(); }
         });
-        topMargin(done, 32);
+        topMargin(done, 24);
         col.addView(done);
     }
-
-    private String delayLabel()   { return "Seconds per photo:  " + fmtDelay(getDelay()); }
-    private String shuffleLabel() { return "Shuffle photos:  " + (getShuffle() ? "On" : "Off"); }
-    private String fadeBtnLabel() { return "Transition:  " + fadeLabel(getFade()); }
 
     private void topMargin(View v, int dp) {
         LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) v.getLayoutParams();

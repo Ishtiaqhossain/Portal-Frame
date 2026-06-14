@@ -117,6 +117,17 @@ final class Ui {
         return filledButton(c, t, onClick, TEXT, SURFACE, SURFACE_PRESSED, 64);
     }
 
+    /** Outlined neutral button (64dp) — secondary actions that sit on a card. */
+    static Button outline(Context c, String t, final Runnable onClick) {
+        Button b = baseButton(c, t, onClick, TEXT, 64);
+        GradientDrawable g = roundRect(0x00000000, dp(c, 16));
+        g.setStroke(dp(c, 2), 0x40FFFFFF);
+        GradientDrawable p = roundRect(SURFACE_PRESSED, dp(c, 16));
+        p.setStroke(dp(c, 2), 0x40FFFFFF);
+        b.setBackground(pressable(p, g));
+        return b;
+    }
+
     /** Outlined red destructive button (64dp). */
     static Button destructive(Context c, String t, final Runnable onClick) {
         Button b = baseButton(c, t, onClick, RED, 64);
