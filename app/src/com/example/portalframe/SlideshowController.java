@@ -441,6 +441,38 @@ public class SlideshowController {
         }
     }
 
+    /**
+     * Clear both image layers to black immediately. Called when the frame comes to
+     * the foreground so a resumed/relaunched instance doesn't briefly show the
+     * PREVIOUS run's last photo (retained in the ImageView) before the new first
+     * frame loads. Bumps the anim generation so any in-flight load is discarded.
+     */
+    public void blank() {
+        animGen++;
+        if (kbAnim != null) {
+            kbAnim.cancel();
+            kbAnim = null;
+        }
+        front.animate().cancel();
+        front.setImageDrawable(null);
+        front.setAlpha(0f);
+        front.setScaleX(1f);
+        front.setScaleY(1f);
+        front.setTranslationX(0f);
+        front.setTranslationY(0f);
+        back.setImageDrawable(null);
+        back.setScaleX(1f);
+        back.setScaleY(1f);
+        back.setTranslationX(0f);
+        back.setTranslationY(0f);
+        back.setColorFilter(null);
+        front.setColorFilter(null);
+        info.setText("");
+        if (ambientGlow != null) {
+            ambientGlow.setAlpha(0f);
+        }
+    }
+
     /** Swap the photo source at runtime (e.g. bundled samples -> album). */
     public void setItems(List<Slide> newItems) {
         if (newItems == null || newItems.isEmpty()) {

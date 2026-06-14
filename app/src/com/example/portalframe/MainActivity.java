@@ -93,6 +93,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Clear any photo retained from a previous run so re-entering the frame
+        // doesn't flash the old image before the first new frame loads.
+        controller.blank();
         startDimming(); // ease screen brightness down at night, up in the morning
         SharedPreferences prefs = getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE);
         albumUrl = prefs.getString(ConfigReceiver.KEY_ALBUM, "");
