@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.portalframe"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="29" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <application
+        android:label="Portal Frame"
+        android:icon="@drawable/ic_launcher"
+        android:allowBackup="false">
+
+        <!-- Foreground / kiosk slideshow. Not a LAUNCHER entry: Portal's launcher
+             would then show a second icon, and the slideshow is reached via the
+             screensaver (FrameDreamService) or a long-press on it. Started via
+             the dream, the "Photos" setup screen, or `am start` for testing. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:screenOrientation="landscape" />
+
+        <!-- The real screensaver path: a standard Android DreamService that
+             Portal's Daydream framework can be pointed at. -->
+        <service
+            android:name=".FrameDreamService"
+            android:exported="true"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
+        <!-- On-device setup: pick the Google Photos album by scanning its QR code,
+             and tune the slideshow (delay / shuffle / transition). Shown as the
+             "Photos" app icon on the Portal home. -->
+        <activity
+            android:name=".PhotosActivity"
+            android:exported="true"
+            android:label="Photos"
+            android:icon="@drawable/ic_launcher"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Set the Google Photos shared-album URL over ADB (see ConfigReceiver). -->
+        <receiver
+            android:name=".ConfigReceiver"
+            android:exported="true" />
+
+    </application>
+</manifest>
