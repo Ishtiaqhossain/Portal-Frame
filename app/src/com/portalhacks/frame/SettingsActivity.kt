@@ -75,6 +75,8 @@ class SettingsActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resumeTick.intValue++
+        // Re-assert Frame (and restart the guard if it was killed) when opted in.
+        ScreensaverGuardService.startIfEnabled(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,6 +100,20 @@ class SettingsActivity : ComponentActivity() {
         try {
             startActivity(Intent(Settings.ACTION_DREAM_SETTINGS))
         } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * Make Frame the screensaver. With WRITE_SECURE_SETTINGS we set it directly and
+     * start the guard so the launcher can't reclaim the slot on rotation; otherwise we
+     * fall back to the system Screen-saver picker.
+     */
+    private fun enableScreensaver() {
+        prefs.edit().putBoolean(ConfigReceiver.KEY_GUARD, true).apply()
+        if (Screensaver.claim(this)) {
+            ScreensaverGuardService.start(this)
+        } else {
+            openScreensaver()
         }
     }
 
@@ -128,15 +144,29 @@ class SettingsActivity : ComponentActivity() {
         val sourceCards: @Composable () -> Unit = {
             Card("Screensaver") {
                 val active = isOurScreensaver()
+                val protectedMode = Screensaver.canWrite(ctx)
                 Body(
-                    if (active)
-                        "✓ Frame is your screensaver. Your photos appear when the Portal is idle."
-                    else
-                        "Tap below, then choose “Frame” so your photos show when the Portal is idle.",
+                    when {
+                        active && protectedMode ->
+                            "✓ Frame is your screensaver — and Frame keeps it that way, even after a rotation."
+                        active ->
+                            "✓ Frame is your screensaver. Your photos appear when the Portal is idle."
+                        else ->
+                            "Tap below so your photos show when the Portal is idle."
+                    },
                 )
+                if (!protectedMode) {
+                    Spacer(Modifier.height(8.dp))
+                    Body(
+                        "On Portal / Portal+ the system can reset this after a screen rotation. " +
+                            "To make it stick, grant one permission once over ADB:\n" +
+                            "adb shell pm grant com.portalhacks.frame " +
+                            "android.permission.WRITE_SECURE_SETTINGS",
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
                 if (active) OutlineBtn("Change screensaver") { openScreensaver() }
-                else PrimaryBtn("Use as screensaver") { openScreensaver() }
+                else PrimaryBtn("Use as screensaver") { enableScreensaver(); tick++ }
             }
             Card(if (hasAlbum) "Albums" else "No albums yet") {
                 if (hasAlbum) {

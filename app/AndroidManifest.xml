@@ -7,6 +7,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Keep Frame set as the screensaver even when the Portal launcher reclaims the
+         dream slot (e.g. on rotation). Granted once over ADB:
+         adb shell pm grant com.portalhacks.frame android.permission.WRITE_SECURE_SETTINGS -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
@@ -64,6 +70,21 @@
         <receiver
             android:name=".ConfigReceiver"
             android:exported="true" />
+
+        <!-- Re-asserts Frame as the screensaver when the launcher reclaims the dream
+             slot. Needs WRITE_SECURE_SETTINGS (granted over ADB); see ScreensaverGuard. -->
+        <service
+            android:name=".ScreensaverGuardService"
+            android:exported="false" />
+
+        <!-- Restarts the guard after a reboot if the user opted in. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>

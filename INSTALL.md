@@ -103,6 +103,20 @@ confirm it's the right one.
 
 Tap **Done** to leave setup.
 
+#### Make it stick on Portal / Portal+ (optional, recommended)
+On some Portal models (notably **Portal+**, which has a rotating screen) the built-in launcher
+**resets the screensaver back to its own** whenever the home screen is recreated — for example
+after you **rotate the screen**. If Frame keeps reverting, grant it permission to keep itself set,
+once, over ADB:
+
+```bash
+adb shell pm grant com.portalhacks.frame android.permission.WRITE_SECURE_SETTINGS
+```
+
+Then open Frame and tap **Use as screensaver** again. Frame will now re-assert itself whenever the
+launcher tries to take the slot back, so it survives rotations and reboots. (Until you grant this,
+Frame falls back to the normal system picker and the launcher may still reset it.)
+
 ---
 
 ## Part 3 — Using Frame day to day
@@ -151,6 +165,9 @@ Tap **Done** to leave setup.
   Paste the link into the field on the same **Add album** screen instead.
 - **"Frame" isn't in the screensaver list.** Make sure the app installed (the **Frame** icon is on
   the home screen), then tap **Use as screensaver** again.
+- **Frame keeps reverting to the Portal's own screensaver (e.g. after rotating the screen).** The
+  launcher reclaims the screensaver slot. Grant the one-time permission in
+  [Make it stick on Portal / Portal+](#make-it-stick-on-portal--portal-optional-recommended) above.
 - **Videos are skipped.** Frame shows photos only; videos in the album are ignored.
 - **Only sample photos show.** That means no album is set (or it couldn't be reached) — open Frame
   and add your album again.

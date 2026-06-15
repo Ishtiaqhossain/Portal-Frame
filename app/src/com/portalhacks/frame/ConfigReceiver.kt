@@ -55,6 +55,22 @@ class ConfigReceiver : BroadcastReceiver() {
             }
         }
 
+        // Toggle the screensaver guard over ADB (keeps Frame as the dream even when the
+        // launcher reclaims the slot on rotation). Needs WRITE_SECURE_SETTINGS granted:
+        //   adb shell am broadcast -n com.portalhacks.frame/.ConfigReceiver --ez guard true
+        if (intent.hasExtra("guard")) {
+            val on = intent.getBooleanExtra("guard", true)
+            prefs.edit().putBoolean(KEY_GUARD, on).apply()
+            if (on) {
+                Screensaver.claim(ctx)
+                ScreensaverGuardService.start(ctx)
+                Log.i("PortalFrame", "screensaver guard enabled")
+            } else {
+                ScreensaverGuardService.stop(ctx)
+                Log.i("PortalFrame", "screensaver guard disabled")
+            }
+        }
+
         val ed = prefs.edit()
         var any = false
         for (e in BOOL_EXTRAS) {
@@ -75,6 +91,7 @@ class ConfigReceiver : BroadcastReceiver() {
         const val KEY_ALBUM = "album_url" // legacy single album (migrated into KEY_ALBUMS)
         const val KEY_ALBUMS = "album_urls" // JSON array of configured album URLs
         const val KEY_ALBUMS_DISABLED = "album_urls_disabled" // JSON array of stopped album URLs
+        const val KEY_GUARD = "screensaver_guard" // boolean: keep re-asserting Frame as the dream
 
         // Slideshow settings (written by PhotosActivity, read by SlideshowController).
         const val KEY_DELAY_MS = "delay_ms"     // ms each photo is held
