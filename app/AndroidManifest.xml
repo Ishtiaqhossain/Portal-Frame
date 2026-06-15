@@ -39,7 +39,7 @@
             android:exported="true"
             android:label="Frame"
             android:icon="@mipmap/ic_launcher"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:theme="@style/Theme.FrameSetup"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

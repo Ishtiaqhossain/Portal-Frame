@@ -29,7 +29,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -155,17 +154,8 @@ class SettingsActivity : ComponentActivity() {
                             "Tap below so your photos show when the Portal is idle."
                     },
                 )
-                if (!protectedMode) {
-                    Spacer(Modifier.height(8.dp))
-                    Body(
-                        "On Portal / Portal+ the system can reset this after a screen rotation. " +
-                            "To make it stick, grant one permission once over ADB:\n" +
-                            "adb shell pm grant com.portalhacks.frame " +
-                            "android.permission.WRITE_SECURE_SETTINGS",
-                    )
-                }
                 Spacer(Modifier.height(12.dp))
-                if (active) OutlineBtn("Change screensaver") { openScreensaver() }
+                if (active) PrimaryBtn("Change screensaver") { openScreensaver() }
                 else PrimaryBtn("Use as screensaver") { enableScreensaver(); tick++ }
             }
             Card(if (hasAlbum) "Albums" else "No albums yet") {
@@ -249,26 +239,9 @@ class SettingsActivity : ComponentActivity() {
                     settingsCards()
                 }
 
-                // Leave room so the last card scrolls clear of the pinned Done bar below.
-                Spacer(Modifier.height(96.dp))
-            }
-
-            // Pinned Done bar — always visible, so it's discoverable without scrolling
-            // to the bottom of a long settings list.
-            Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(PortalColors.Bg),
-            ) {
-                Box(Modifier.fillMaxWidth().height(1.dp).background(PortalColors.Hairline))
-                Box(
-                    Modifier.fillMaxWidth().padding(horizontal = 40.dp, vertical = 16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Button(
-                        onClick = { finish() },
-                        modifier = Modifier.widthIn(max = 1100.dp).fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PortalColors.Surface),
-                    ) { Text("Done", color = PortalColors.Text, fontSize = 18.sp) }
-                }
+                // Trailing breathing room at the end of the scroll (no pinned bar:
+                // leaving the screen is the Portal system top bar's back button).
+                Spacer(Modifier.height(24.dp))
             }
         }
     }
@@ -420,11 +393,6 @@ class SettingsActivity : ComponentActivity() {
         modifier = Modifier.fillMaxWidth().height(64.dp),
         colors = ButtonDefaults.buttonColors(containerColor = PortalColors.Blue),
     ) { Text(label, color = PortalColors.OnPrimary, fontSize = 18.sp) }
-
-    @Composable
-    private fun OutlineBtn(label: String, onClick: () -> Unit) = OutlinedButton(
-        onClick = onClick, modifier = Modifier.fillMaxWidth().height(56.dp),
-    ) { Text(label, color = PortalColors.Text, fontSize = 18.sp) }
 
     @Composable
     private fun ToggleRow(label: String, key: String, def: Boolean, onChanged: () -> Unit) {

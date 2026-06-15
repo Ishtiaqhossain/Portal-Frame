@@ -11,4 +11,14 @@
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:windowDisablePreview">true</item>
     </style>
+
+    <!--
+      Setup/settings window theme. NOT fullscreen, so Portal's system top bar
+      (back / home, Wi-Fi / status) floats over the screen just like it does for
+      the built-in apps — that overlay's back button replaces our old "Done"
+      button. The content reserves ~72dp at the top so nothing tucks under it.
+    -->
+    <style name="Theme.FrameSetup" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
 </resources>
