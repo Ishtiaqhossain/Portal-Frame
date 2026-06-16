@@ -520,7 +520,10 @@ class PhotosActivity : Activity() {
         topCol.addView(title)
         val subtitle = TextView(this)
         this.scanHint = subtitle // reused for "that QR isn't…/Album added ✓" feedback
-        subtitle.text = "Scan its QR code in the box, or paste a link below."
+        // The lens is fixed-focus (sharp only past ~0.6m) and ultra-wide, so a QR fills very few
+        // pixels up close where it's also blurry. Counterintuitive but correct guidance: make the
+        // code big and hold it back at arm's length so it's both in focus and large enough to read.
+        subtitle.text = DEFAULT_SCAN_HINT
         subtitle.setTextColor(0xFFD2D2D2.toInt())
         subtitle.typeface = Ui.medium(this)
         subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
@@ -590,27 +593,69 @@ class PhotosActivity : Activity() {
                 pr.setPreviewSize(best.width, best.height)
             }
             pr.previewFormat = ImageFormat.NV21
-            // Camera is fixed-focus (no autofocus on Portal); a moderate zoom enlarges a
-            // far-but-in-focus QR so it carries more pixels.
+            // Portal Go's front camera is fixed-focus (HAL confirms focus-mode-values="fixed",
+            // afAvailableModes=[OFF]), hyperfocal ~1.16m, and ultra-wide (~96° hFOV) at only
+            // 1280x720 — so a QR aimed at the box lands in the centre as just a few dozen pixels.
+            //
+            // Zoom does double duty here. Obviously it enlarges the QR. Less obviously it fixes the
+            // exposure: at low zoom the dark room fills most of this ultra-wide frame, so the AE
+            // brightens for the room and blows the screen out. Zoom in hard and the bright screen
+            // *fills the frame*, so the AE meters the screen and exposes down — the one lever that
+            // actually moves exposure on this HAL (EV is ignored). zoompct is tunable for testing.
             if (pr.isZoomSupported) {
-                val z = Math.max(1, pr.maxZoom / 3)
+                val zoomPct = intent?.getIntExtra("zoompct", 90) ?: 90
+                val z = Math.max(1, Math.min(pr.maxZoom, pr.maxZoom * zoomPct / 100))
                 pr.zoom = z
             }
-            // A bright phone screen blows out to white if AE meters the whole dim room. Meter
-            // the centre box (where the QR is) and bias exposure down so the QR is readable
-            // immediately instead of after AE slowly adapts.
-            if (pr.maxNumMeteringAreas >= 1) {
-                val areas = ArrayList<Camera.Area>()
-                areas.add(Camera.Area(Rect(-350, -350, 350, 350), 1000))
-                pr.meteringAreas = areas
+            // Force the highest fixed frame rate the camera offers. A fixed high FPS caps the
+            // exposure *time* the AE is allowed to integrate, so it physically can't over-expose
+            // the bright screen by holding the shutter open for the dark room. (Tunable: hifps=0
+            // leaves the default auto range.)
+            if (intent?.getIntExtra("hifps", 1) != 0) {
+                val ranges = pr.supportedPreviewFpsRange // each is [min,max] in fps*1000
+                // Prefer the range with the highest minimum (most aggressive exposure-time cap),
+                // breaking ties on the highest max.
+                val best = ranges?.maxWithOrNull(
+                    compareBy({ it[0] }, { it[1] }),
+                )
+                if (best != null) {
+                    pr.setPreviewFpsRange(best[0], best[1])
+                }
+                Log.i(TAG, "QR cam fps ranges=" + ranges?.joinToString { it.contentToString() })
             }
-            val step = pr.exposureCompensationStep
-            var comp = if (step > 0) Math.round(-2.0f / step) else pr.minExposureCompensation
-            comp = Math.max(pr.minExposureCompensation, Math.min(pr.maxExposureCompensation, comp))
-            pr.exposureCompensation = comp
+            // The blow-out fix above is the zoom (it makes the bright screen fill the frame so the
+            // AE exposes for it). The exposure controls below are a defensive *secondary*: on this
+            // Portal Go HAL they're no-ops — measured: EV -9 didn't change the frame and AE can't
+            // be turned off — but other Portal models / firmwares may honour them, and they can't
+            // hurt. Barcode scene mode is preferred when offered (purpose-built, and it takes over
+            // metering/exposure itself, so it's used alone); otherwise centre-meter + bias dark.
+            val sceneModes = pr.supportedSceneModes
+            val usingBarcodeScene =
+                sceneModes?.contains(Camera.Parameters.SCENE_MODE_BARCODE) == true
+            if (usingBarcodeScene) {
+                pr.sceneMode = Camera.Parameters.SCENE_MODE_BARCODE
+            } else {
+                if (pr.maxNumMeteringAreas >= 1) {
+                    val areas = ArrayList<Camera.Area>()
+                    areas.add(Camera.Area(Rect(-350, -350, 350, 350), 1000))
+                    pr.meteringAreas = areas
+                }
+                if (pr.minExposureCompensation < 0) {
+                    pr.exposureCompensation = pr.minExposureCompensation
+                }
+            }
+            // Phone displays flicker (PWM dimming / panel refresh); let the camera cancel the
+            // rolling bands that would otherwise streak across — and corrupt — the code. Harmless
+            // alongside either path above (the HAL ignores it if a scene mode already drives it).
+            val antibanding = pr.supportedAntibanding
+            if (antibanding?.contains(Camera.Parameters.ANTIBANDING_AUTO) == true) {
+                pr.antibanding = Camera.Parameters.ANTIBANDING_AUTO
+            }
 
-            // Autofocus makes a dense QR sharp — the single biggest factor for decoding. The
-            // camera was *assumed* fixed-focus; prefer continuous focus when it's actually offered.
+            // The Portal Go camera is genuinely fixed-focus — focus-mode-values reports only
+            // "fixed", so none of the autofocus modes below are ever offered. We still probe for
+            // them defensively (other Portal models / future firmware may differ); on Go this
+            // when-block is a no-op and focus stays at the lens's hyperfocal (~1.16m).
             val focusModes = pr.supportedFocusModes
             when {
                 focusModes?.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE) == true ->
@@ -624,10 +669,14 @@ class PhotosActivity : Activity() {
             Log.i(
                 TAG,
                 "QR cam caps: focusModes=" + focusModes + " using=" + pr.focusMode +
+                    " sceneMode=" + pr.sceneMode + " ev=" + pr.exposureCompensation +
+                    "/[" + pr.minExposureCompensation + ".." + pr.maxExposureCompensation + "]" +
+                    " antibanding=" + pr.antibanding +
                     " preview=" + pr.previewSize.width + "x" + pr.previewSize.height + " maxPicture=" +
                     pr.supportedPictureSizes.maxByOrNull { it.width * it.height }
                         ?.let { "${it.width}x${it.height}" } +
-                    " hFov=" + pr.horizontalViewAngle + " zoom=" + pr.zoom + "/" + pr.maxZoom,
+                    " hFov=" + pr.horizontalViewAngle + " zoom=" + pr.zoom + "/" + pr.maxZoom +
+                    " fpsRange=" + IntArray(2).also { pr.getPreviewFpsRange(it) }.contentToString(),
             )
 
             val ps = camera.parameters.previewSize
@@ -762,6 +811,9 @@ class PhotosActivity : Activity() {
     companion object {
         private const val TAG = "PortalFrame"
         private const val REQ_CAMERA = 1
+        private const val DEFAULT_SCAN_HINT =
+            "Make the QR large and fill the box with it at about arm's length — or paste the " +
+                "link below."
         private const val SCREENSAVER_COMPONENT =
             "com.portalhacks.frame/com.portalhacks.frame.FrameDreamService"
 
