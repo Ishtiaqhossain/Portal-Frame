@@ -2,9 +2,9 @@ import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
-    id("com.android.application") version "8.13.2"
-    id("org.jetbrains.kotlin.android") version "2.4.0"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.4.0"
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 // Release signing inputs, read from env vars (CI) or a local, git-ignored
@@ -61,7 +61,13 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            // R8: shrink + obfuscate the code and strip unused resources for the release APK.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             // Sign the release only when a keystore is configured; otherwise
             // assembleRelease still builds, producing an unsigned APK.
             if (signingConfigs.getByName("release").storeFile != null) {
@@ -87,12 +93,11 @@ kotlin {
 dependencies {
     implementation(files("libs/zxing-core-3.5.3.jar"))
 
-    val composeBom = platform("androidx.compose:compose-bom:2026.05.01")
-    implementation(composeBom)
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-core")
-    implementation("androidx.activity:activity-compose:1.12.4")
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.core)
+    implementation(libs.androidx.activity.compose)
 }
