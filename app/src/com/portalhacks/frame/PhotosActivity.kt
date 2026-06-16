@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
@@ -22,6 +23,7 @@ import android.text.TextUtils
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -65,6 +67,7 @@ class PhotosActivity : Activity() {
 
     // Scanner state
     private var camera: Camera? = null
+    private var cameraId = 0 // remembered so onConfigurationChanged can re-orient the preview
     private var surface: SurfaceView? = null
     private var scanHint: TextView? = null
 
@@ -112,6 +115,28 @@ class PhotosActivity : Activity() {
     override fun onPause() {
         super.onPause()
         stopCamera()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // The activity handles orientation changes itself (configChanges in the manifest), so the
+        // camera isn't torn down when the Portal screen is rotated — but its preview keeps the
+        // orientation it had when it opened, leaving the live preview sideways. Re-apply the
+        // display orientation and aspect for the new rotation. (Decode is rotation-agnostic; this
+        // is purely the on-screen preview.) Stop/start around setDisplayOrientation since some
+        // HALs reject it mid-preview.
+        val c = camera ?: return
+        try {
+            c.stopPreview()
+            val orientation = previewDisplayOrientation(cameraId)
+            c.setDisplayOrientation(orientation)
+            if (previewW != 0 && previewH != 0) {
+                sizePreviewToAspect(previewW, previewH, orientation)
+            }
+            c.startPreview()
+        } catch (e: Exception) {
+            Log.e(TAG, "re-orient on rotation failed", e)
+        }
     }
 
     // ------------------------------------------------ screensaver setup
@@ -474,8 +499,14 @@ class PhotosActivity : Activity() {
         f.addView(surface, FrameLayout.LayoutParams(MATCH, MATCH))
 
         val boxSize = Ui.dp(this, 300f)
+        // Keep the target window near the TOP of the screen, close to the physical camera. On the
+        // Portal+ held vertically the lens sits at the top centre, so a centred window leaves the
+        // user aiming far below the camera. The mask cut-out and the blue box share this top so
+        // they stay aligned; everything else reflows around it (title above, hints below).
+        val boxTop = Ui.dp(this, 64f)
+        val boxCenterY = boxTop + boxSize / 2
 
-        // Black out everything except the centred box, so the camera preview only lights up
+        // Black out everything except the target window, so the camera preview only lights up
         // that window (less glare in the room) and the user's eye goes to the target. Drawn as
         // the view's *background* (always drawn) so it reliably composites over the camera
         // SurfaceView — the same path the blue box border uses.
@@ -486,9 +517,9 @@ class PhotosActivity : Activity() {
                 val r = bounds
                 val half = boxSize / 2
                 val l = (r.centerX() - half).toFloat()
-                val t = (r.centerY() - half).toFloat()
+                val t = (boxCenterY - half).toFloat()
                 val rt = (r.centerX() + half).toFloat()
-                val bt = (r.centerY() + half).toFloat()
+                val bt = (boxCenterY + half).toFloat()
                 canvas.drawRect(r.left.toFloat(), r.top.toFloat(), r.right.toFloat(), t, paint)
                 canvas.drawRect(r.left.toFloat(), bt, r.right.toFloat(), r.bottom.toFloat(), paint)
                 canvas.drawRect(r.left.toFloat(), t, l, bt, paint)
@@ -501,35 +532,38 @@ class PhotosActivity : Activity() {
         }
         f.addView(mask, FrameLayout.LayoutParams(MATCH, MATCH))
 
-        // Centred target box (Portal blue) so the user knows where to aim the QR.
+        // Top-aligned target box (Portal blue) so the user knows where to aim the QR.
         val box = View(this)
         val border = Ui.roundRect(0x00000000, Ui.dp(this, 20f))
         border.setStroke(Ui.dp(this, 4f), Ui.BLUE)
         box.background = border
         val bp = FrameLayout.LayoutParams(boxSize, boxSize)
-        bp.gravity = Gravity.CENTER
+        bp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        bp.topMargin = boxTop
         f.addView(box, bp)
 
         // Centred max-width columns so nothing spans the whole screen.
         val colW = Math.min(Ui.dp(this, 640f), resources.displayMetrics.widthPixels - Ui.dp(this, 48f))
 
-        // Top: screen title + a subtitle that doubles as scan feedback.
-        val topCol = LinearLayout(this)
-        topCol.orientation = LinearLayout.VERTICAL
-        topCol.gravity = Gravity.CENTER_HORIZONTAL
+        // Title sits in the slim strip above the top-aligned window.
         val title = TextView(this)
         title.text = "Add an album"
         title.setTextColor(0xFFF0F0F0.toInt())
         title.typeface = Ui.bold(this)
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
         title.gravity = Gravity.CENTER_HORIZONTAL
         title.setShadowLayer(8f, 0f, 1f, Color.BLACK)
-        topCol.addView(title)
+        val titleLp = FrameLayout.LayoutParams(colW, WRAP)
+        titleLp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        titleLp.topMargin = Ui.dp(this, 16f)
+        f.addView(title, titleLp)
+
+        // Instructions / scan feedback go just BELOW the window so the window stays high.
         val subtitle = TextView(this)
         this.scanHint = subtitle // reused for "that QR isn't…/Album added ✓" feedback
-        // Empirically the QR decodes best held close — ~3 inches from the lens — so the bright
-        // screen fills the whole ultra-wide frame: that maxes the AE-exposes-down effect (the
-        // only working exposure lever here) and the zoom sweep crops in for the module detail.
+        // This lens is fixed-focus at infinity, so a QR is only sharp held back at ~arm's length;
+        // up close it blurs and the modules merge. The zoom sweep then enlarges the (now distant)
+        // code so it still spans enough pixels to decode.
         subtitle.text = DEFAULT_SCAN_HINT
         subtitle.setTextColor(0xFFD2D2D2.toInt())
         subtitle.typeface = Ui.medium(this)
@@ -537,13 +571,10 @@ class PhotosActivity : Activity() {
         subtitle.gravity = Gravity.CENTER_HORIZONTAL
         subtitle.setLineSpacing(Ui.dp(this, 3f).toFloat(), 1f)
         subtitle.setShadowLayer(8f, 0f, 1f, Color.BLACK)
-        val subLp = LinearLayout.LayoutParams(MATCH, WRAP)
-        subLp.topMargin = Ui.dp(this, 6f)
-        topCol.addView(subtitle, subLp)
-        val topLp = FrameLayout.LayoutParams(colW, WRAP)
-        topLp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        topLp.topMargin = Ui.dp(this, 56f)
-        f.addView(topCol, topLp)
+        val subLp = FrameLayout.LayoutParams(colW, WRAP)
+        subLp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        subLp.topMargin = boxTop + boxSize + Ui.dp(this, 24f)
+        f.addView(subtitle, subLp)
 
         // Bottom: paste a link + a compact Done button.
         val bottomCol = LinearLayout(this)
@@ -584,6 +615,7 @@ class PhotosActivity : Activity() {
     private fun openCamera(holder: SurfaceHolder) {
         try {
             val id = pickCamera()
+            cameraId = id
             val camera = Camera.open(id)
             this.camera = camera
             val pr = camera.parameters
@@ -599,6 +631,7 @@ class PhotosActivity : Activity() {
             if (best != null) {
                 pr.setPreviewSize(best.width, best.height)
             }
+            val previewSize = best
             pr.previewFormat = ImageFormat.NV21
             // Portal Go's front camera is fixed-focus (HAL confirms focus-mode-values="fixed",
             // afAvailableModes=[OFF]), hyperfocal ~1.16m, and ultra-wide (~96° hFOV) at only
@@ -613,8 +646,11 @@ class PhotosActivity : Activity() {
                 // A fixed `zoompct` override pins one level (for on-device testing); otherwise
                 // sweep a few levels at runtime so the scanner self-tunes the exposure to the
                 // phone in front of it rather than relying on a single hardcoded guess.
+                // Span wide→tight so the sweep self-tunes across mounts: the high steps (80/100)
+                // fill the frame for the close-held Go (exposure), the lower steps (20/50) keep an
+                // arm's-length QR in frame on the Portal+ where the lens is fixed at infinity.
                 val fixed = intent?.getIntExtra("zoompct", 0) ?: 0
-                val pcts = if (fixed > 0) intArrayOf(fixed) else intArrayOf(80, 90, 100)
+                val pcts = if (fixed > 0) intArrayOf(fixed) else intArrayOf(20, 50, 80, 100)
                 zoomLevels = pcts
                     .map { Math.max(1, Math.min(pr.maxZoom, pr.maxZoom * it / 100)) }
                     .distinct()
@@ -697,7 +733,15 @@ class PhotosActivity : Activity() {
             previewH = ps.height
             frameCount = 0
 
-            camera.setDisplayOrientation(0) // preview is feedback only; decode uses raw data
+            // Orient the *preview* upright for however the Portal screen is mounted (Portal+ can
+            // be vertical/portrait, Portal Go is landscape). Feedback only — decode reads raw NV21
+            // (sensor-native, unaffected) and tries every rotation — but a sideways, squashed
+            // preview makes the QR impossible to aim, so match the display and fit the aspect.
+            val orientation = previewDisplayOrientation(id)
+            camera.setDisplayOrientation(orientation)
+            if (previewSize != null) {
+                sizePreviewToAspect(previewSize.width, previewSize.height, orientation)
+            }
             camera.setPreviewDisplay(holder)
             scanning = true
             camera.setPreviewCallback(previewCb)
@@ -712,6 +756,52 @@ class PhotosActivity : Activity() {
             toast("Couldn't open the camera")
             finish()
         }
+    }
+
+    /**
+     * Degrees to rotate the camera preview so it appears upright on the current display, from the
+     * device's rotation and the camera's mounted sensor orientation (standard Android formula).
+     * Front-facing cameras are mirrored by the framework, so they subtract rather than add.
+     */
+    private fun previewDisplayOrientation(cameraId: Int): Int {
+        val info = Camera.CameraInfo()
+        Camera.getCameraInfo(cameraId, info)
+        val degrees = when (windowManager.defaultDisplay.rotation) {
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+        return if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+            (360 - (info.orientation + degrees) % 360) % 360
+        } else {
+            (info.orientation - degrees + 360) % 360
+        }
+    }
+
+    /**
+     * Size the preview SurfaceView to the camera's aspect ratio, FITTING the whole frame inside
+     * the screen (letterboxed) rather than cropping to fill. Fitting keeps the field of view
+     * identical in portrait and landscape — covering would center-crop the 16:9 sensor frame much
+     * harder on a portrait screen, making it look zoomed in vertical though the camera isn't. A
+     * 90°/270° rotation swaps width/height. Decode is unaffected — it reads the raw frame.
+     */
+    private fun sizePreviewToAspect(previewW: Int, previewH: Int, orientation: Int) {
+        val s = surface ?: return
+        val rotated = orientation == 90 || orientation == 270
+        val aspectW = if (rotated) previewH else previewW
+        val aspectH = if (rotated) previewW else previewH
+        if (aspectW == 0 || aspectH == 0) return
+        val dm = resources.displayMetrics
+        val scale = Math.min(
+            dm.widthPixels.toFloat() / aspectW,
+            dm.heightPixels.toFloat() / aspectH,
+        )
+        s.layoutParams = FrameLayout.LayoutParams(
+            (aspectW * scale).toInt(),
+            (aspectH * scale).toInt(),
+        ).apply { gravity = Gravity.CENTER }
+        s.requestLayout()
     }
 
     private val previewCb = Camera.PreviewCallback { data, _ ->
@@ -743,16 +833,29 @@ class PhotosActivity : Activity() {
     }
 
     /**
-     * Try to decode a QR from an NV21 luma plane. The Portal's front camera is
-     * fixed-focus and may deliver mirrored frames, so we try: full frame normal,
-     * full frame mirrored, then a centered crop (more relative resolution for a
-     * small/central code) normal + mirrored. Returns the text or null.
+     * Try to decode a QR from an NV21 luma plane.
+     *
+     * The camera sensor always delivers a landscape frame regardless of how the Portal screen is
+     * mounted, so on a vertically-held device the QR — upright to the user — sits rotated 90° in
+     * the frame. We decode the frame as-is first (the fast path, and what a landscape screen
+     * needs), then, only if that fails, re-decode the luma rotated upright, trying both 90° and
+     * 270° to cover either portrait mount.
      */
     private fun tryDecode(data: ByteArray, w: Int, h: Int): String? {
+        decodeAllRegions(data, w, h)?.let { return it }
+        decodeAllRegions(rotateLuma(data, w, h, true), h, w)?.let { return it }
+        decodeAllRegions(rotateLuma(data, w, h, false), h, w)?.let { return it }
+        return null
+    }
+
+    /**
+     * Decode attempts over one (already-oriented) luma frame: full frame, then centred crops,
+     * each tried normal + mirrored (the front camera may deliver mirrored frames). Cropping in
+     * gives a small/distant QR more pixels per module.
+     */
+    private fun decodeAllRegions(data: ByteArray, w: Int, h: Int): String? {
         decodeRegion(data, w, h, 0, 0, w, h, false)?.let { return it }
         decodeRegion(data, w, h, 0, 0, w, h, true)?.let { return it }
-        // Centred crops: a QR aimed at the box covers only the middle of this ultra-wide
-        // frame, so cropping in gives it more pixels per module. Try a couple of sizes.
         for (frac in floatArrayOf(0.6f, 0.4f)) {
             val side = (Math.min(w, h) * frac).toInt()
             val left = (w - side) / 2
@@ -761,6 +864,27 @@ class PhotosActivity : Activity() {
             decodeRegion(data, w, h, left, top, side, side, true)?.let { return it }
         }
         return null
+    }
+
+    /**
+     * Rotate just the NV21 luma (Y) plane 90° — clockwise if [cw], else counter-clockwise —
+     * returning a w*h Y-only buffer with the dimensions swapped (caller passes h as the new
+     * width, w as the new height). Chroma is dropped: [PlanarYUVLuminanceSource] reads only luma.
+     */
+    private fun rotateLuma(data: ByteArray, w: Int, h: Int, cw: Boolean): ByteArray {
+        val out = ByteArray(w * h)
+        if (cw) {
+            for (y in 0 until h) {
+                val row = y * w
+                for (x in 0 until w) out[x * h + (h - 1 - y)] = data[row + x]
+            }
+        } else {
+            for (y in 0 until h) {
+                val row = y * w
+                for (x in 0 until w) out[(w - 1 - x) * h + y] = data[row + x]
+            }
+        }
+        return out
     }
 
     private fun decodeRegion(
@@ -848,7 +972,7 @@ class PhotosActivity : Activity() {
         private const val REQ_CAMERA = 1
         private const val ZOOM_STEP_FRAMES = 12 // frames held at each zoom level before stepping
         private const val DEFAULT_SCAN_HINT =
-            "Hold the phone close — about 3 inches from the camera — so the QR fills the box. " +
+            "Hold the QR back at about arm's length and fill the box with it — up close it blurs. " +
                 "Or paste the link below."
         private const val SCREENSAVER_COMPONENT =
             "com.portalhacks.frame/com.portalhacks.frame.FrameDreamService"
