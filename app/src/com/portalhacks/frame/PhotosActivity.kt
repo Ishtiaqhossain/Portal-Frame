@@ -36,6 +36,13 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import boofcv.factory.fiducial.FactoryFiducial
+import boofcv.struct.image.GrayU8
+import com.google.mlkit.vision.barcode.BarcodeScanner
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
 import com.google.zxing.PlanarYUVLuminanceSource
@@ -85,6 +92,16 @@ class PhotosActivity : Activity() {
     // depends on the phone's screen brightness — so we sweep instead of betting one constant.
     private var zoomLevels: IntArray = intArrayOf()
     private var zoomIdx = 0
+
+    // QR decoder cascade. ML Kit's bundled (on-device) model is tried first — it's the strongest
+    // on bright / washed-out phone screens — then BoofCV, then ZXing (the rotateLuma path). ML Kit
+    // drags in play-services code, so if it can't run on a GMS-less Portal we flip [mlkitUsable]
+    // off on the first failure and fall through to BoofCV (pure-JVM) for the rest of the session.
+    private var mlkitScanner: BarcodeScanner? = null
+    private var mlkitUsable = true
+    @Volatile
+    private var decoding = false // an async ML Kit decode is in flight; skip incoming frames
+    private val boofDetector by lazy { FactoryFiducial.qrcode(null, GrayU8::class.java) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -743,6 +760,26 @@ class PhotosActivity : Activity() {
                 sizePreviewToAspect(previewSize.width, previewSize.height, orientation)
             }
             camera.setPreviewDisplay(holder)
+            // Tuning knob: `--ei nomlkit 1` forces ML Kit off so BoofCV (then ZXing) is used.
+            if (intent?.getIntExtra("nomlkit", 0) == 1) {
+                mlkitUsable = false
+                Log.i(TAG, "QR decoder: ML Kit disabled (nomlkit); using BoofCV/ZXing")
+            }
+            // Spin up the ML Kit QR scanner (bundled model). If it can't be created, fall back to
+            // BoofCV/ZXing for the session.
+            if (mlkitUsable && mlkitScanner == null) {
+                mlkitScanner = try {
+                    val opts = BarcodeScannerOptions.Builder()
+                        .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                        .build()
+                    Log.i(TAG, "QR decoder: ML Kit (bundled)")
+                    BarcodeScanning.getClient(opts)
+                } catch (e: Throwable) {
+                    Log.w(TAG, "ML Kit unavailable; using BoofCV/ZXing", e)
+                    mlkitUsable = false
+                    null
+                }
+            }
             scanning = true
             camera.setPreviewCallback(previewCb)
             camera.startPreview()
@@ -820,15 +857,71 @@ class PhotosActivity : Activity() {
                 zoomIdx = (zoomIdx + 1) % zoomLevels.size
                 applyZoom(zoomLevels[zoomIdx])
             }
-            // Decode every frame: the Camera1 callback naturally drops frames while we're busy,
-            // so this self-throttles to whatever the CPU sustains rather than fixed half-rate.
-            val text = tryDecode(data, previewW, previewH)
-            if (text != null) {
-                scanning = false // stop processing further frames until we decide
-                main.post { onQr(text) }
-            } else if (frameCount % 30 == 1) {
-                Log.i(TAG, "QR scan: " + frameCount + " frames, no QR decoded yet")
+            if (decoding) return@PreviewCallback // an ML Kit decode is still in flight
+
+            val scanner = mlkitScanner
+            if (mlkitUsable && scanner != null) {
+                // ML Kit is async and Camera1 reuses its preview buffer, so hand it a COPY and gate
+                // new frames on [decoding]. ML Kit QR detection is rotation-invariant, so a single
+                // upright pass also covers a vertically-mounted screen (no rotateLuma needed).
+                decoding = true
+                val w = previewW
+                val h = previewH
+                val copy = data.copyOf()
+                val image = InputImage.fromByteArray(copy, w, h, 0, InputImage.IMAGE_FORMAT_NV21)
+                scanner.process(image)
+                    .addOnSuccessListener { barcodes ->
+                        decoding = false
+                        val v = barcodes.firstOrNull { !it.rawValue.isNullOrEmpty() }?.rawValue
+                        // ML Kit found nothing on this frame → final safety net is ZXing.
+                        val text = v ?: tryDecode(copy, w, h)
+                        if (text != null && scanning) {
+                            scanning = false
+                            main.post { onQr(text) }
+                        } else if (frameCount % 30 == 1) {
+                            Log.i(TAG, "QR scan: " + frameCount + " frames, no QR decoded yet")
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        decoding = false
+                        // ML Kit can't run here (likely no GMS) — disable it for the session and
+                        // fall through to BoofCV/ZXing from now on.
+                        Log.w(TAG, "ML Kit decode failed; switching to BoofCV/ZXing", e)
+                        mlkitUsable = false
+                        val text = decodeBoof(copy, w, h) ?: tryDecode(copy, w, h)
+                        if (text != null && scanning) {
+                            scanning = false
+                            main.post { onQr(text) }
+                        }
+                    }
+            } else {
+                // ML Kit disabled: BoofCV first (also rotation-invariant), then the ZXing path.
+                // Synchronous — Camera1 drops frames while we're busy, so this self-throttles.
+                val text = decodeBoof(data, previewW, previewH)
+                    ?: tryDecode(data, previewW, previewH)
+                if (text != null) {
+                    scanning = false
+                    main.post { onQr(text) }
+                } else if (frameCount % 30 == 1) {
+                    Log.i(TAG, "QR scan: " + frameCount + " frames, no QR decoded yet")
+                }
             }
+        }
+    }
+
+    /**
+     * BoofCV QR decode over the NV21 luma plane (the first w*h bytes are the grayscale image).
+     * BoofCV's detector is rotation-invariant, so no rotateLuma pass is needed.
+     */
+    private fun decodeBoof(nv21: ByteArray, w: Int, h: Int): String? {
+        return try {
+            val gray = GrayU8(w, h)
+            System.arraycopy(nv21, 0, gray.data, 0, w * h)
+            boofDetector.process(gray)
+            boofDetector.detections.firstOrNull()?.message?.takeIf { it.isNotEmpty() }
+        } catch (e: Throwable) {
+            Log.w(TAG, "BoofCV decode error", e)
+            null
         }
     }
 
@@ -951,6 +1044,7 @@ class PhotosActivity : Activity() {
 
     private fun stopCamera() {
         scanning = false
+        decoding = false
         camera?.let { c ->
             try {
                 c.setPreviewCallback(null)
@@ -961,6 +1055,8 @@ class PhotosActivity : Activity() {
             }
             camera = null
         }
+        mlkitScanner?.let { try { it.close() } catch (ignored: Exception) {} }
+        mlkitScanner = null
     }
 
     private fun toast(m: String) {

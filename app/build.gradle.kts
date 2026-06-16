@@ -85,6 +85,13 @@ kotlin {
 }
 
 dependencies {
+    // QR decoders, tried in a cascade (see PhotosActivity): ML Kit's bundled (on-device, no GMS)
+    // model is the strongest on bright/washed-out screens; BoofCV is the open-source fallback if
+    // ML Kit can't initialise on a GMS-less Portal; the vendored ZXing jar is the final fallback.
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    // boofcv-recognition carries FactoryFiducial/QR detection (pure-JVM); we feed it the NV21 luma
+    // directly, so we don't need the boofcv-android Bitmap/NV21 helpers.
+    implementation("org.boofcv:boofcv-recognition:1.1.4")
     implementation(files("libs/zxing-core-3.5.3.jar"))
 
     val composeBom = platform("androidx.compose:compose-bom:2026.05.01")

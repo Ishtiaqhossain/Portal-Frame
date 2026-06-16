@@ -9,6 +9,18 @@ ZXing ("Zebra Crossing") — core module
   License:     Apache License, Version 2.0
                https://www.apache.org/licenses/LICENSE-2.0
 
+BoofCV — QR code detection (fallback decoder)
+  Coordinate:  org.boofcv:boofcv-android
+  Homepage:    https://boofcv.org/
+  License:     Apache License, Version 2.0
+               https://www.apache.org/licenses/LICENSE-2.0
+
+Google ML Kit — barcode scanning, bundled on-device model (primary decoder)
+  Coordinate:  com.google.mlkit:barcode-scanning
+  Homepage:    https://developers.google.com/ml-kit
+  License:     Google APIs Terms of Service / ML Kit Terms
+               https://developers.google.com/ml-kit/terms
+
 AndroidX / Jetpack Compose, the Kotlin standard library, and the Android SDK
 (resolved via Gradle) are likewise licensed under the Apache License, Version 2.0.
 
