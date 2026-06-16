@@ -400,6 +400,18 @@ class PhotosActivity : Activity() {
         v.layoutParams = lp
     }
 
+    /** A centered section heading for the scanner screen. */
+    private fun sectionHeading(text: String): TextView {
+        val t = TextView(this)
+        t.text = text
+        t.setTextColor(0xFFF0F0F0.toInt())
+        t.typeface = Ui.bold(this)
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+        t.gravity = Gravity.CENTER_HORIZONTAL
+        t.setShadowLayer(8f, 0f, 1f, Color.BLACK)
+        return t
+    }
+
     /** A tappable On/Off row bound to a boolean pref. */
     private fun boolRow(label: String, key: String, def: Boolean): View {
         val row = Ui.row(this, label, if (prefs().getBoolean(key, def)) "On" else "Off", null)
@@ -558,12 +570,19 @@ class PhotosActivity : Activity() {
         titleLp.topMargin = Ui.dp(this, 16f)
         f.addView(title, titleLp)
 
-        // Instructions / scan feedback go just BELOW the window so the window stays high.
+        // Below the box: two clearly-titled sections — how to scan, and a manual paste fallback —
+        // with a wide gap between them so they read as distinct choices.
+        val belowBox = LinearLayout(this)
+        belowBox.orientation = LinearLayout.VERTICAL
+        belowBox.gravity = Gravity.CENTER_HORIZONTAL
+
+        // Section 1: scanning (labels the scan window above) + instructions.
+        belowBox.addView(sectionHeading("Scan a QR code"), LinearLayout.LayoutParams(MATCH, WRAP))
+
         val subtitle = TextView(this)
         this.scanHint = subtitle // reused for "that QR isn't…/Album added ✓" feedback
-        // This lens is fixed-focus at infinity, so a QR is only sharp held back at ~arm's length;
-        // up close it blurs and the modules merge. The zoom sweep then enlarges the (now distant)
-        // code so it still spans enough pixels to decode.
+        // The lens is fixed-focus, so slowly moving the QR toward/away sweeps it through the focus
+        // (and the zoom sweep's exposure levels) until a frame lands — hence the back-and-forth tip.
         subtitle.text = DEFAULT_SCAN_HINT
         subtitle.setTextColor(0xFFD2D2D2.toInt())
         subtitle.typeface = Ui.medium(this)
@@ -571,30 +590,33 @@ class PhotosActivity : Activity() {
         subtitle.gravity = Gravity.CENTER_HORIZONTAL
         subtitle.setLineSpacing(Ui.dp(this, 3f).toFloat(), 1f)
         subtitle.setShadowLayer(8f, 0f, 1f, Color.BLACK)
-        val subLp = FrameLayout.LayoutParams(colW, WRAP)
-        subLp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        subLp.topMargin = boxTop + boxSize + Ui.dp(this, 24f)
-        f.addView(subtitle, subLp)
+        val subLp = LinearLayout.LayoutParams(MATCH, WRAP)
+        subLp.topMargin = Ui.dp(this, 8f)
+        belowBox.addView(subtitle, subLp)
 
-        // Bottom: paste a link + a compact Done button.
-        val bottomCol = LinearLayout(this)
-        bottomCol.orientation = LinearLayout.VERTICAL
+        // Section 2: manual entry, set apart by a wide gap.
+        val manualHeading = sectionHeading("Or enter the link manually")
+        val manualHeadingLp = LinearLayout.LayoutParams(MATCH, WRAP)
+        manualHeadingLp.topMargin = Ui.dp(this, 56f)
+        belowBox.addView(manualHeading, manualHeadingLp)
+
         val edit = Ui.field(this, "Paste a Google Photos or iCloud link")
         edit.setSingleLine(true)
         edit.inputType = InputType.TYPE_CLASS_TEXT or
             InputType.TYPE_TEXT_VARIATION_URI or
             InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        bottomCol.addView(edit)
+        belowBox.addView(edit)
         val done = pillButton("Done", Ui.BLUE, 0xFFF0F0F0.toInt()) { addTypedAlbum(edit) }
         val doneLp = LinearLayout.LayoutParams(WRAP, WRAP)
         doneLp.topMargin = Ui.dp(this, 14f)
         doneLp.gravity = Gravity.END
         done.layoutParams = doneLp
-        bottomCol.addView(done)
-        val bottomLp = FrameLayout.LayoutParams(colW, WRAP)
-        bottomLp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-        bottomLp.bottomMargin = Ui.dp(this, 40f)
-        f.addView(bottomCol, bottomLp)
+        belowBox.addView(done)
+
+        val belowLp = FrameLayout.LayoutParams(colW, WRAP)
+        belowLp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        belowLp.topMargin = boxTop + boxSize + Ui.dp(this, 24f)
+        f.addView(belowBox, belowLp)
 
         root.addView(f)
 
@@ -972,8 +994,8 @@ class PhotosActivity : Activity() {
         private const val REQ_CAMERA = 1
         private const val ZOOM_STEP_FRAMES = 12 // frames held at each zoom level before stepping
         private const val DEFAULT_SCAN_HINT =
-            "Hold the QR back at about arm's length and fill the box with it — up close it blurs. " +
-                "Or paste the link below."
+            "Point the QR at the camera and slowly move it back and forth a few times until it " +
+                "scans. Or paste the link below."
         private const val SCREENSAVER_COMPONENT =
             "com.portalhacks.frame/com.portalhacks.frame.FrameDreamService"
 
