@@ -1,6 +1,7 @@
 package com.portalhacks.frame
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -105,6 +106,16 @@ class SlideshowComposeActivity : ComponentActivity() {
                     or View.SYSTEM_UI_FLAG_FULLSCREEN
                     or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                 )
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // The manifest declares configChanges for orientation, so the Activity (and the hosted
+        // SlideshowController) survive a rotation. Tell the controller to recompute its screen
+        // dimensions / pairing axis so side-by-side ↔ top/bottom follows the new orientation.
+        if (::controller.isInitialized) {
+            controller.onScreenConfigChanged()
         }
     }
 

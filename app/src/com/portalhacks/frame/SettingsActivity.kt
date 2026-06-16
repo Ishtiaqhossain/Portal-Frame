@@ -188,7 +188,7 @@ class SettingsActivity : ComponentActivity() {
                     setLong(ConfigReceiver.KEY_FADE_MS, next); tick++
                 }
                 Divider()
-                ToggleRow("Side-by-side portraits", ConfigReceiver.KEY_PAIRS, true) { tick++ }
+                ToggleRow("Pair photos to fill the screen", ConfigReceiver.KEY_PAIRS, true) { tick++ }
                 Divider()
                 ToggleRow("Cinematic motion", ConfigReceiver.KEY_KEN_BURNS, true) { tick++ }
                 Divider()

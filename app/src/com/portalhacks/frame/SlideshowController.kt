@@ -81,8 +81,9 @@ class SlideshowController(
     private var weather: Weather.Now? = null // current reading; null until loaded
     private val moonDrawable: Drawable // blue crescent, clear nights
     private val handler = Handler(Looper.getMainLooper())
-    private val reqW: Int
-    private val reqH: Int
+    private var reqW: Int
+    private var reqH: Int
+    private var screenPortrait: Boolean // screen taller than wide → pair/stack opposite axis
 
     // Smart-shuffle memory: ids shown recently (most-recent first) so a reshuffle
     // doesn't immediately replay them, and the last id to avoid a back-to-back repeat.
@@ -94,7 +95,7 @@ class SlideshowController(
     private val intervalMs: Long // time each slide is held
     private val autoFadeMs: Long // auto crossfade duration
     private val shuffle: Boolean // play photos in random order
-    private val pairs: Boolean // pair portrait photos side-by-side
+    private val pairs: Boolean // pair two photos to fill the screen (side-by-side or stacked)
     private val kenBurns: Boolean // cinematic slow pan + zoom while held
     private val showClock: Boolean // clock + weather overlay
     private val nightMode: Boolean // warm night dimming
@@ -113,7 +114,7 @@ class SlideshowController(
     private var items: MutableList<Slide> = ArrayList()
     private var remote = false
     private var index = 0
-    private var curIsPair = false // current frame shows a portrait pair
+    private var curIsPair = false // current frame shows a paired (two-photo) composite
     private var running = false
     private var animGen = 0L
     private var onDismiss: Runnable? = null
@@ -124,6 +125,7 @@ class SlideshowController(
         val dm = context.resources.displayMetrics
         reqW = if (dm.widthPixels > 0) dm.widthPixels else 1280
         reqH = if (dm.heightPixels > 0) dm.heightPixels else 800
+        screenPortrait = reqH > reqW
 
         val prefs = context.getSharedPreferences(ConfigReceiver.PREFS, Context.MODE_PRIVATE)
         intervalMs = prefs.getLong(ConfigReceiver.KEY_DELAY_MS, ConfigReceiver.DEFAULT_DELAY_MS)
@@ -492,6 +494,28 @@ class SlideshowController(
     }
 
     /**
+     * Re-read the screen size/orientation after a device rotation. The host Activity handles
+     * orientation config changes itself (it isn't recreated), so without this the controller keeps
+     * the dimensions and pairing axis it captured at construction — leaving e.g. top/bottom stacks
+     * on a now-landscape screen. Updates the Ken Burns target size and the pairing axis, then
+     * re-renders the current slide so side-by-side ↔ top/bottom flips to match the new orientation.
+     */
+    fun onScreenConfigChanged() {
+        val dm = context.resources.displayMetrics
+        val w = if (dm.widthPixels > 0) dm.widthPixels else reqW
+        val h = if (dm.heightPixels > 0) dm.heightPixels else reqH
+        if (w == reqW && h == reqH) {
+            return // no real dimension change
+        }
+        reqW = w
+        reqH = h
+        screenPortrait = reqH > reqW
+        if (running && items.isNotEmpty() && index in items.indices) {
+            showImmediate(index) // rebuild the current frame for the new orientation
+        }
+    }
+
+    /**
      * Clear both image layers to black immediately. Called when the frame comes to
      * the foreground so a resumed/relaunched instance doesn't briefly show the
      * PREVIOUS run's last photo (retained in the ImageView) before the new first
@@ -652,7 +676,7 @@ class SlideshowController(
             scheduleAuto()
         }
         if (isPair) {
-            loader.loadPair(items[i].id, items[j].id, reqW, reqH, cb)
+            loader.loadPair(items[i].id, items[j].id, reqW, reqH, screenPortrait, cb)
         } else {
             loader.load(items[i].id, reqW, reqH, cb)
         }
@@ -712,23 +736,28 @@ class SlideshowController(
             }
         }
         if (isPair) {
-            loader.loadPair(items[next].id, items[j].id, reqW, reqH, cb)
+            loader.loadPair(items[next].id, items[j].id, reqW, reqH, screenPortrait, cb)
         } else {
             loader.load(items[next].id, reqW, reqH, cb)
         }
     }
 
-    /** Index this slide pairs with (the next portrait), or -1 if it doesn't pair. */
+    /**
+     * Index this slide pairs with, or -1 if it doesn't pair. We pair two consecutive photos whose
+     * orientation is OPPOSITE the screen's, so together they fill it: portrait photos side-by-side
+     * on a landscape screen, landscape photos stacked top/bottom on a vertical screen. A photo that
+     * matches the screen orientation already fills it, so it's shown alone (full-screen).
+     */
     private fun pairWith(start: Int): Int {
         if (!pairs || items.size < 2 || start < 0 || start >= items.size) {
             return -1
         }
-        if (!items[start].portrait) {
-            return -1
+        if (items[start].portrait == screenPortrait) {
+            return -1 // already fills the screen on its own
         }
         val j = start + 1
-        if (j >= items.size || !items[j].portrait) {
-            return -1 // don't pair across the loop wrap
+        if (j >= items.size || items[j].portrait == screenPortrait) {
+            return -1 // next can't pair (fills screen alone, or loop wrap)
         }
         return j
     }

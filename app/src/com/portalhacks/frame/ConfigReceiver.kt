@@ -97,7 +97,7 @@ class ConfigReceiver : BroadcastReceiver() {
         const val KEY_DELAY_MS = "delay_ms"     // ms each photo is held
         const val KEY_SHUFFLE = "shuffle"       // boolean: random order
         const val KEY_FADE_MS = "fade_ms"       // ms auto crossfade duration
-        const val KEY_PAIRS = "pairs"           // boolean: pair portraits side-by-side
+        const val KEY_PAIRS = "pairs"           // boolean: pair two photos to fill the screen
         const val KEY_KEN_BURNS = "ken_burns"   // boolean: cinematic pan/zoom
         const val KEY_CLOCK = "clock"           // boolean: clock + weather overlay
         const val KEY_CLOCK_LOW_LIGHT = "clock_low_light" // boolean: clock-only in low light
