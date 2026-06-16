@@ -56,6 +56,13 @@ jobs:
           cp "$APK" "$OUT"
           sha256sum "$OUT" | tee "$OUT.sha256"
           echo "apk=$OUT" >> "$GITHUB_OUTPUT"
+          # Stable, version-less copy so the README can link to a permanent
+          # /releases/latest/download/Frame.apk URL (the redirect needs a
+          # filename that's identical across every release).
+          STABLE="Frame.apk"
+          cp "$APK" "$STABLE"
+          sha256sum "$STABLE" | tee "$STABLE.sha256"
+          echo "stable=$STABLE" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifact (every run)
         uses: actions/upload-artifact@v4
@@ -72,4 +79,6 @@ jobs:
           files: |
             ${{ steps.artifact.outputs.apk }}
             ${{ steps.artifact.outputs.apk }}.sha256
+            ${{ steps.artifact.outputs.stable }}
+            ${{ steps.artifact.outputs.stable }}.sha256
           generate_release_notes: true

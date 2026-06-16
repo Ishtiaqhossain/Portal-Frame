@@ -9,8 +9,12 @@ cinematic motion, and ambient color.
 
 ## Install it on a Portal
 
-Download the latest `Frame-*.apk` from **[Releases](https://github.com/Ishtiaqhossain/Portal-Frame/releases/latest)**,
-then follow the **[Install & User Guide](INSTALL.md)** (install the APK, add your album, turn it on
+### ⬇️ [Download the latest APK](https://github.com/Ishtiaqhossain/Portal-Frame/releases/latest/download/Frame.apk)
+
+That link always serves the newest signed release. Prefer to pick a version (or grab the
+`.sha256`)? Browse all builds on the **[Releases page](https://github.com/Ishtiaqhossain/Portal-Frame/releases/latest)**.
+
+Then follow the **[Install & User Guide](INSTALL.md)** (install the APK, add your album, turn it on
 as the screensaver).
 
 ## Screenshots
