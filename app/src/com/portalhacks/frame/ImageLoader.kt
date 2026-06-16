@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -21,6 +22,7 @@ import java.security.MessageDigest
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -57,38 +59,43 @@ class ImageLoader(context: Context) {
         return io
     }
 
-    fun load(id: String, reqW: Int, reqH: Int, cb: Callback) {
-        val cached = mem.get(id)
+    fun load(id: String, reqW: Int, reqH: Int, zoomFill: Boolean, cb: Callback) {
+        val key = fillKey(id, zoomFill)
+        val cached = mem.get(key)
         if (cached != null) {
             cb.onLoaded(cached)
             return
         }
         io.execute {
-            val bmp = loadSync(id, reqW, reqH)
+            val bmp = loadSync(id, reqW, reqH, zoomFill)
             if (bmp != null) {
-                mem.put(id, bmp)
+                mem.put(key, bmp)
             }
             main.post { cb.onLoaded(bmp) }
         }
     }
 
     /** Warm the cache for an id without a UI callback. */
-    fun prefetch(id: String, reqW: Int, reqH: Int) {
-        if (mem.get(id) != null) {
+    fun prefetch(id: String, reqW: Int, reqH: Int, zoomFill: Boolean) {
+        val key = fillKey(id, zoomFill)
+        if (mem.get(key) != null) {
             return
         }
         io.execute {
-            val b = loadSync(id, reqW, reqH)
+            val b = loadSync(id, reqW, reqH, zoomFill)
             if (b != null) {
-                mem.put(id, b)
+                mem.put(key, b)
             }
         }
     }
 
-    private fun loadSync(id: String, reqW: Int, reqH: Int): Bitmap? {
+    /** Cache key that distinguishes the two fill modes (zoom-crop vs whole photo + blur). */
+    private fun fillKey(id: String, zoomFill: Boolean): String = if (zoomFill) "$id|z" else "$id|f"
+
+    private fun loadSync(id: String, reqW: Int, reqH: Int, zoomFill: Boolean): Bitmap? {
         return try {
             val raw = decodeRaw(id, reqW, reqH) ?: return null
-            composeFill(raw, reqW, reqH)
+            composeFill(raw, reqW, reqH, zoomFill)
         } catch (e: Exception) {
             Log.e(TAG, "load failed $id", e)
             null
@@ -119,6 +126,8 @@ class ImageLoader(context: Context) {
         id1: String, id2: String,
         reqW: Int, reqH: Int, stackVertical: Boolean, cb: Callback
     ) {
+        // A paired photo only gets half the screen, so it's always center-cropped to fill its
+        // half — the "zoom to fill" setting applies only to single, full-screen photos.
         val key = "$id1|$id2|${if (stackVertical) "v" else "h"}"
         val cached = mem.get(key)
         if (cached != null) {
@@ -250,18 +259,17 @@ class ImageLoader(context: Context) {
         private const val MAX_IMAGE_BYTES = 30 * 1024 * 1024
 
         /**
-         * Compose [src] into a screen-sized frame, center-cropped to fill it: the photo is zoomed
-         * until it covers the whole frame, cropping the overflow on its longer axis. No letterbox
-         * bars and no blurred bleed.
+         * Compose [src] into a screen-sized frame. [zoomFill] = center-crop to fill (zoom in,
+         * cropping the overflow); otherwise the whole photo fit-centred over a blurred fill.
          */
-        private fun composeFill(src: Bitmap?, screenW: Int, screenH: Int): Bitmap? {
+        private fun composeFill(src: Bitmap?, screenW: Int, screenH: Int, zoomFill: Boolean): Bitmap? {
             if (src == null || screenW <= 0 || screenH <= 0) {
                 return src
             }
             val out = Bitmap.createBitmap(screenW, screenH, Bitmap.Config.ARGB_8888)
             val c = Canvas(out)
             val p = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
-            drawComposed(c, p, src, 0, 0, screenW, screenH)
+            drawComposed(c, p, src, 0, 0, screenW, screenH, zoomFill)
             if (src != out) {
                 src.recycle()
             }
@@ -269,9 +277,10 @@ class ImageLoader(context: Context) {
         }
 
         /**
-         * Two photos sharing the screen, each center-cropped to fill its half, with a thin black
-         * seam between. [stackVertical] splits top/bottom (landscape photos on a vertical screen);
-         * otherwise side-by-side (portrait photos on a landscape screen). Recycles [a]/[b].
+         * Two photos sharing the screen, each center-cropped to fill its half (a half-screen photo
+         * is always zoomed to fill — the "zoom to fill" setting is only for single photos), with a
+         * thin black seam between. [stackVertical] splits top/bottom (landscape photos on a vertical
+         * screen); otherwise side-by-side. Recycles [a]/[b].
          */
         private fun composePair(
             a: Bitmap, b: Bitmap, screenW: Int, screenH: Int, stackVertical: Boolean
@@ -284,14 +293,14 @@ class ImageLoader(context: Context) {
             if (stackVertical) {
                 val gap = max(2, screenH / 300)
                 val half = (screenH - gap) / 2
-                drawComposed(c, p, a, 0, 0, screenW, half)
-                drawComposed(c, p, b, 0, half + gap, screenW, screenH - half - gap)
+                drawComposed(c, p, a, 0, 0, screenW, half, true)
+                drawComposed(c, p, b, 0, half + gap, screenW, screenH - half - gap, true)
                 c.drawRect(0f, half.toFloat(), screenW.toFloat(), (half + gap).toFloat(), seam)
             } else {
                 val gap = max(2, screenW / 300)
                 val half = (screenW - gap) / 2
-                drawComposed(c, p, a, 0, 0, half, screenH)
-                drawComposed(c, p, b, half + gap, 0, screenW - half - gap, screenH)
+                drawComposed(c, p, a, 0, 0, half, screenH, true)
+                drawComposed(c, p, b, half + gap, 0, screenW - half - gap, screenH, true)
                 c.drawRect(half.toFloat(), 0f, (half + gap).toFloat(), screenH.toFloat(), seam)
             }
             a.recycle()
@@ -300,20 +309,41 @@ class ImageLoader(context: Context) {
         }
 
         /**
-         * Draw [src] into the rect ([left],[top],[w]×[h]), center-cropped to FILL it: the photo is
-         * zoomed until it covers the whole rect, with the overflow on the longer axis cropped off.
-         * No letterbox bars and no blurred bleed. Does not recycle [src].
+         * Draw [src] into the rect ([left],[top],[w]×[h]). [zoomFill] = center-crop to FILL the
+         * rect (zoom in, crop the overflow). Otherwise the whole photo is fit-centred (never
+         * cropped) over a blurred, center-cropped fill behind a gentle scrim. Does not recycle [src].
          */
         private fun drawComposed(
             c: Canvas, p: Paint, src: Bitmap?,
-            left: Int, top: Int, w: Int, h: Int
+            left: Int, top: Int, w: Int, h: Int, zoomFill: Boolean
         ) {
             if (src == null || w <= 0 || h <= 0) {
                 return
             }
             val dst = Rect(left, top, left + w, top + h)
-            val crop = centerCropRect(src.width, src.height, w, h)
-            c.drawBitmap(src, crop, dst, p)
+            if (zoomFill) {
+                c.drawBitmap(src, centerCropRect(src.width, src.height, w, h), dst, p)
+                return
+            }
+            // Blurred background: center-crop into a tiny bitmap, blur, draw upscaled.
+            val bw = max(1, w / 16)
+            val bh = max(1, h / 16)
+            val small = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+            Canvas(small).drawBitmap(
+                src, centerCropRect(src.width, src.height, bw, bh), Rect(0, 0, bw, bh), p
+            )
+            boxBlur(small, 3, 2)
+            c.drawBitmap(small, Rect(0, 0, bw, bh), dst, p)
+            small.recycle()
+
+            val scrim = Paint()
+            scrim.color = Color.argb(70, 0, 0, 0) // gentle scrim behind the photo
+            c.drawRect(dst, scrim)
+
+            // Sharp foreground: whole photo, fit-centered (no crop).
+            val fc = fitCenterRect(src.width, src.height, w, h)
+            fc.offset(left.toFloat(), top.toFloat())
+            c.drawBitmap(src, null, fc, p)
         }
 
         private fun centerCropRect(sw: Int, sh: Int, dw: Int, dh: Int): Rect {
@@ -335,6 +365,80 @@ class ImageLoader(context: Context) {
                 cy = (sh - ch) / 2
             }
             return Rect(cx, cy, cx + cw, cy + ch)
+        }
+
+        private fun fitCenterRect(sw: Int, sh: Int, dw: Int, dh: Int): RectF {
+            val scale = min(dw / sw.toFloat(), dh / sh.toFloat())
+            val w = sw * scale
+            val h = sh * scale
+            val left = (dw - w) / 2f
+            val top = (dh - h) / 2f
+            return RectF(left, top, left + w, top + h)
+        }
+
+        private fun boxBlur(bmp: Bitmap, radius: Int, passes: Int) {
+            val w = bmp.width
+            val h = bmp.height
+            if (w <= 0 || h <= 0) {
+                return
+            }
+            val a = IntArray(w * h)
+            val b = IntArray(w * h)
+            bmp.getPixels(a, 0, w, 0, 0, w, h)
+            for (p in 0 until passes) {
+                boxH(a, b, w, h, radius)
+                boxV(b, a, w, h, radius)
+            }
+            bmp.setPixels(a, 0, w, 0, 0, w, h)
+        }
+
+        private fun boxH(`in`: IntArray, out: IntArray, w: Int, h: Int, r: Int) {
+            for (y in 0 until h) {
+                val row = y * w
+                for (x in 0 until w) {
+                    var aa = 0
+                    var rr = 0
+                    var gg = 0
+                    var bb = 0
+                    var cnt = 0
+                    val x0 = max(0, x - r)
+                    val x1 = min(w - 1, x + r)
+                    for (xx in x0..x1) {
+                        val c = `in`[row + xx]
+                        aa += (c ushr 24) and 0xff
+                        rr += (c shr 16) and 0xff
+                        gg += (c shr 8) and 0xff
+                        bb += c and 0xff
+                        cnt++
+                    }
+                    out[row + x] =
+                        ((aa / cnt) shl 24) or ((rr / cnt) shl 16) or ((gg / cnt) shl 8) or (bb / cnt)
+                }
+            }
+        }
+
+        private fun boxV(`in`: IntArray, out: IntArray, w: Int, h: Int, r: Int) {
+            for (x in 0 until w) {
+                for (y in 0 until h) {
+                    var aa = 0
+                    var rr = 0
+                    var gg = 0
+                    var bb = 0
+                    var cnt = 0
+                    val y0 = max(0, y - r)
+                    val y1 = min(h - 1, y + r)
+                    for (yy in y0..y1) {
+                        val c = `in`[yy * w + x]
+                        aa += (c ushr 24) and 0xff
+                        rr += (c shr 16) and 0xff
+                        gg += (c shr 8) and 0xff
+                        bb += c and 0xff
+                        cnt++
+                    }
+                    out[y * w + x] =
+                        ((aa / cnt) shl 24) or ((rr / cnt) shl 16) or ((gg / cnt) shl 8) or (bb / cnt)
+                }
+            }
         }
 
         private fun md5(s: String): String {

@@ -41,7 +41,6 @@ import java.util.Random
 import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Crossfading slideshow. Items are image IDs — either bundled asset paths
@@ -104,6 +103,8 @@ class SlideshowController(
     private val faceFraming: Boolean // bias Ken Burns toward detected faces
     private val ambientColor: Boolean // tint chrome to each photo's palette
     private val enhance: Boolean // on-device auto-levels + vibrance
+    private val zoomFill: Boolean // single photos: crop to fill (vs whole photo + blurred fill).
+                                  // Pairs always fill their half regardless.
 
     // Ken Burns animation state.
     private val rnd = Random()
@@ -140,6 +141,7 @@ class SlideshowController(
         faceFraming = prefs.getBoolean(ConfigReceiver.KEY_FACE, ConfigReceiver.DEFAULT_FACE)
         ambientColor = prefs.getBoolean(ConfigReceiver.KEY_AMBIENT, ConfigReceiver.DEFAULT_AMBIENT)
         enhance = prefs.getBoolean(ConfigReceiver.KEY_ENHANCE, ConfigReceiver.DEFAULT_ENHANCE)
+        zoomFill = prefs.getBoolean(ConfigReceiver.KEY_ZOOM_FILL, ConfigReceiver.DEFAULT_ZOOM_FILL)
         monthYearFmt.timeZone = TimeZone.getTimeZone("UTC")
 
         root.setBackgroundColor(Color.BLACK)
@@ -678,7 +680,7 @@ class SlideshowController(
         if (isPair) {
             loader.loadPair(items[i].id, items[j].id, reqW, reqH, screenPortrait, cb)
         } else {
-            loader.load(items[i].id, reqW, reqH, cb)
+            loader.load(items[i].id, reqW, reqH, zoomFill, cb)
         }
     }
 
@@ -738,7 +740,7 @@ class SlideshowController(
         if (isPair) {
             loader.loadPair(items[next].id, items[j].id, reqW, reqH, screenPortrait, cb)
         } else {
-            loader.load(items[next].id, reqW, reqH, cb)
+            loader.load(items[next].id, reqW, reqH, zoomFill, cb)
         }
     }
 
@@ -770,7 +772,7 @@ class SlideshowController(
 
     private fun prefetchNext(startIndex: Int) {
         if (items.size > 1 && startIndex >= 0 && startIndex < items.size) {
-            loader.prefetch(items[startIndex].id, reqW, reqH)
+            loader.prefetch(items[startIndex].id, reqW, reqH, zoomFill)
         }
     }
 
@@ -849,11 +851,11 @@ class SlideshowController(
     }
 
     /**
-     * A slow zoom + gentle pan applied to the settled image while it's held — the
-     * cinematic "Ken Burns" motion. The path is edge-safe: pan is bounded by the
-     * slack of the smallest scale on the path, so the scaled image always covers
-     * the view (no black/blur reveal). When a focal point is given (e.g. a detected
-     * face), the motion eases toward it.
+     * A slow zoom-in + gentle pan applied to the settled image while it's held — the cinematic
+     * "Ken Burns" motion. Each photo STARTS at exactly minimum fill (scale 1.0, centred) so it's
+     * first shown zoomed the minimum amount, then eases gently inward. The pan starts at zero and
+     * grows with the scale, so the image always covers the view (no edge reveal). When a focal
+     * point is given (e.g. a detected face), the drift eases toward it.
      */
     private class KenBurns private constructor(
         val s0: Float,
@@ -873,44 +875,32 @@ class SlideshowController(
         }
 
         companion object {
-            private const val ZOOM_MIN = 1.08f
-            private const val ZOOM_MAX = 1.18f
+            // The path always starts at 1.0 (exact minimum fill) and zooms gently toward a target
+            // in this range — so a photo is first shown zoomed the minimum amount, not pre-zoomed.
+            private const val END_ZOOM_MIN = 1.04f
+            private const val END_ZOOM_MAX = 1.10f
 
             /**
              * @param focus optional {fx, fy} in [0,1] image space to drift toward; null = random.
              */
             fun random(w: Int, h: Int, r: Random, focus: FloatArray?): KenBurns {
-                var s0 = ZOOM_MIN + r.nextFloat() * (ZOOM_MAX - ZOOM_MIN)
-                var s1 = ZOOM_MIN + r.nextFloat() * (ZOOM_MAX - ZOOM_MIN)
-                val minS = min(s0, s1)
-                val slackX = (minS - 1f) / 2f * w * 0.9f // 90% of cover slack, for safety
-                val slackY = (minS - 1f) / 2f * h * 0.9f
-                val tx0: Float
+                // Start at exact fill (scale 1.0, centred) and zoom IN to a gentle target. Pan
+                // starts at zero (1.0 has no cover slack) and grows linearly with the scale toward
+                // the end scale's slack — edge-safe at every point along the path.
+                val s1 = END_ZOOM_MIN + r.nextFloat() * (END_ZOOM_MAX - END_ZOOM_MIN)
+                val slackX = (s1 - 1f) / 2f * w * 0.9f // 90% of the end scale's cover slack
+                val slackY = (s1 - 1f) / 2f * h * 0.9f
                 val tx1: Float
-                val ty0: Float
                 val ty1: Float
                 if (focus != null) {
-                    // End centred on the focal point (translate so it moves toward centre);
-                    // start from a gentle offset on the opposite side for visible motion.
-                    val ex = clamp((0.5f - focus[0]) * 2f, -1f, 1f) * slackX
-                    val ey = clamp((0.5f - focus[1]) * 2f, -1f, 1f) * slackY
-                    tx1 = ex
-                    ty1 = ey
-                    tx0 = clamp(ex * -0.4f + (r.nextFloat() - 0.5f) * slackX * 0.5f, -slackX, slackX)
-                    ty0 = clamp(ey * -0.4f + (r.nextFloat() - 0.5f) * slackY * 0.5f, -slackY, slackY)
-                    // bias toward zooming IN on the face
-                    if (s1 < s0) {
-                        val t = s0
-                        s0 = s1
-                        s1 = t
-                    }
+                    // Drift toward the focal point (e.g. a detected face) as it zooms in.
+                    tx1 = clamp((0.5f - focus[0]) * 2f, -1f, 1f) * slackX
+                    ty1 = clamp((0.5f - focus[1]) * 2f, -1f, 1f) * slackY
                 } else {
-                    tx0 = (r.nextFloat() * 2f - 1f) * slackX
                     tx1 = (r.nextFloat() * 2f - 1f) * slackX
-                    ty0 = (r.nextFloat() * 2f - 1f) * slackY
                     ty1 = (r.nextFloat() * 2f - 1f) * slackY
                 }
-                return KenBurns(s0, s1, tx0, tx1, ty0, ty1)
+                return KenBurns(1f, s1, 0f, tx1, 0f, ty1)
             }
 
             private fun clamp(v: Float, lo: Float, hi: Float): Float =

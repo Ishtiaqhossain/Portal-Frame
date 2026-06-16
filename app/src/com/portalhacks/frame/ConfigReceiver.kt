@@ -107,6 +107,8 @@ class ConfigReceiver : BroadcastReceiver() {
         const val KEY_FACE = "face_framing"     // boolean: face-aware Ken Burns target
         const val KEY_AMBIENT = "ambient_color" // boolean: per-photo color glow
         const val KEY_ENHANCE = "auto_enhance"  // boolean: on-device auto-levels + vibrance
+        const val KEY_ZOOM_FILL = "zoom_fill"   // boolean: zoom-crop SINGLE photos to fill (vs whole
+                                                // photo over a blurred fill). Pairs always fill.
         const val DEFAULT_DELAY_MS = 6000L
         const val DEFAULT_FADE_MS = 1200L
         const val DEFAULT_PAIRS = false
@@ -119,6 +121,7 @@ class ConfigReceiver : BroadcastReceiver() {
         const val DEFAULT_FACE = true
         const val DEFAULT_AMBIENT = true
         const val DEFAULT_ENHANCE = false
+        const val DEFAULT_ZOOM_FILL = false // default: whole photo over a blurred fill (no zoom)
 
         // ADB-settable boolean extras (extra name -> pref key) for quick testing, e.g.
         //   adb shell am broadcast -n com.portalhacks.frame/.ConfigReceiver --ez ken_burns false
@@ -127,7 +130,7 @@ class ConfigReceiver : BroadcastReceiver() {
             arrayOf("clock", KEY_CLOCK), arrayOf("clock_low_light", KEY_CLOCK_LOW_LIGHT),
             arrayOf("night", KEY_NIGHT), arrayOf("on_this_day", KEY_ON_THIS_DAY),
             arrayOf("captions", KEY_CAPTIONS), arrayOf("face_framing", KEY_FACE), arrayOf("ambient_color", KEY_AMBIENT),
-            arrayOf("auto_enhance", KEY_ENHANCE),
+            arrayOf("auto_enhance", KEY_ENHANCE), arrayOf("zoom_fill", KEY_ZOOM_FILL),
         )
 
         // Per-album photo caches are managed by AlbumCache (keyed by album URL).

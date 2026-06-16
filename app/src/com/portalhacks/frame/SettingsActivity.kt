@@ -190,6 +190,14 @@ class SettingsActivity : ComponentActivity() {
                 Divider()
                 ToggleRow("Pair photos to fill the screen", ConfigReceiver.KEY_PAIRS, true) { tick++ }
                 Divider()
+                ToggleRow(
+                    "Zoom single photos to fill",
+                    ConfigReceiver.KEY_ZOOM_FILL,
+                    false,
+                    subtitle = "Crop a single photo to fill the screen. Off: show the whole photo " +
+                        "over a blurred fill. Paired photos always fill.",
+                ) { tick++ }
+                Divider()
                 ToggleRow("Cinematic motion", ConfigReceiver.KEY_KEN_BURNS, true) { tick++ }
                 Divider()
                 ToggleRow("Photo captions", ConfigReceiver.KEY_CAPTIONS, true) { tick++ }
@@ -283,8 +291,9 @@ class SettingsActivity : ComponentActivity() {
         LaunchedEffect(url) {
             AlbumCache.title(prefs, url)?.let { title = it }
             val firstId = AlbumCache.firstId(prefs, url)
+            val zoomFill = prefs.getBoolean(ConfigReceiver.KEY_ZOOM_FILL, ConfigReceiver.DEFAULT_ZOOM_FILL)
             if (firstId != null) {
-                loader.load(firstId, PREVIEW_W, PREVIEW_H, onBitmap)
+                loader.load(firstId, PREVIEW_W, PREVIEW_H, zoomFill, onBitmap)
             } else {
                 // Not fetched yet (just added) — fetch once, persist, then show.
                 loader.executor().execute {
@@ -299,7 +308,7 @@ class SettingsActivity : ComponentActivity() {
                         runOnUiThread {
                             if (Albums.list(prefs).contains(url)) {
                                 title = a.title ?: ""
-                                loader.load(id, PREVIEW_W, PREVIEW_H, onBitmap)
+                                loader.load(id, PREVIEW_W, PREVIEW_H, zoomFill, onBitmap)
                             }
                         }
                     } catch (e: Exception) {
@@ -397,13 +406,24 @@ class SettingsActivity : ComponentActivity() {
     ) { Text(label, color = PortalColors.OnPrimary, fontSize = 18.sp) }
 
     @Composable
-    private fun ToggleRow(label: String, key: String, def: Boolean, onChanged: () -> Unit) {
+    private fun ToggleRow(
+        label: String,
+        key: String,
+        def: Boolean,
+        subtitle: String? = null,
+        onChanged: () -> Unit,
+    ) {
         var on by remember(key) { mutableStateOf(prefs.getBoolean(key, def)) }
         Row(
             Modifier.fillMaxWidth().padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(label, color = PortalColors.Text, fontSize = 18.sp, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                Text(label, color = PortalColors.Text, fontSize = 18.sp)
+                if (subtitle != null) {
+                    Text(subtitle, color = PortalColors.Text.copy(alpha = 0.6f), fontSize = 13.sp)
+                }
+            }
             Switch(
                 checked = on,
                 onCheckedChange = {
