@@ -41,6 +41,7 @@ import java.util.Random
 import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Crossfading slideshow. Items are image IDs — either bundled asset paths
@@ -828,7 +829,10 @@ class SlideshowController(
         }
         val p = kbPath ?: return
         val a = ValueAnimator.ofFloat(0f, 1f)
-        a.duration = max(intervalMs, 1200L) + autoFadeMs
+        // Run the pan/zoom over the hold (+ the outgoing fade), but cap it: with long "time per
+        // photo" values (up to a day) an uncapped animator would run a multi-hour ValueAnimator at
+        // ~60fps. Past the cap the motion has finished and the image simply holds at its end frame.
+        a.duration = min(max(intervalMs, 1200L) + autoFadeMs, KEN_BURNS_MAX_MS)
         a.interpolator = LinearInterpolator()
         a.addUpdateListener { va ->
             if (gen != animGen) {
@@ -1200,6 +1204,9 @@ class SlideshowController(
     companion object {
         private const val TAG = "PortalFrame"
         private const val SLIDES_DIR = "slides"
+        // Cap the Ken Burns animation length so long "time per photo" values (up to a day) don't
+        // run a multi-hour ValueAnimator; past this the motion holds at its end frame.
+        private const val KEN_BURNS_MAX_MS = 30_000L
         private const val SWIPE_FADE_MS = 300L // manual swipe fade
         private const val SWIPE_MIN_DISTANCE = 60f
         private const val TAP_SLOP = 30f

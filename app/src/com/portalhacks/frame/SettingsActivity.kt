@@ -29,6 +29,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -51,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 
 /**
  * The Photos setup/settings screen, in Jetpack Compose (migration Milestone 3).
@@ -176,10 +179,7 @@ class SettingsActivity : ComponentActivity() {
         }
         val settingsCards: @Composable () -> Unit = {
             Card("Slideshow") {
-                CycleRow("Seconds per photo", fmtDelay(getLong(ConfigReceiver.KEY_DELAY_MS, 6000))) {
-                    val next = cycle(DELAY_CHOICES, getLong(ConfigReceiver.KEY_DELAY_MS, 6000), 0)
-                    setLong(ConfigReceiver.KEY_DELAY_MS, next); tick++
-                }
+                DurationSliderRow { tick++ }
                 Divider()
                 ToggleRow("Shuffle photos", ConfigReceiver.KEY_SHUFFLE, false) { tick++ }
                 Divider()
@@ -447,6 +447,52 @@ class SettingsActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * "Time per photo": a slider that snaps across [DELAY_PRESETS] (4 sec … 1 day). The slider value
+     * is the preset INDEX (a plain linear ms slider can't span that range). The label updates live
+     * while dragging; the pref is committed on release so we don't thrash prefs every tick.
+     */
+    @Composable
+    private fun DurationSliderRow(onChanged: () -> Unit) {
+        var idx by remember {
+            mutableStateOf(nearestPresetIndex(getLong(ConfigReceiver.KEY_DELAY_MS, ConfigReceiver.DEFAULT_DELAY_MS)))
+        }
+        Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Time per photo", color = PortalColors.Text, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                Text(
+                    fmtDelay(DELAY_PRESETS[idx]),
+                    color = PortalColors.Blue, fontSize = 18.sp, fontWeight = FontWeight.Medium,
+                )
+            }
+            Slider(
+                value = idx.toFloat(),
+                onValueChange = { idx = it.roundToInt() },
+                valueRange = 0f..(DELAY_PRESETS.size - 1).toFloat(),
+                steps = DELAY_PRESETS.size - 2,
+                onValueChangeFinished = {
+                    setLong(ConfigReceiver.KEY_DELAY_MS, DELAY_PRESETS[idx]); onChanged()
+                },
+                colors = SliderDefaults.colors(
+                    thumbColor = PortalColors.Blue,
+                    activeTrackColor = PortalColors.Blue,
+                    inactiveTrackColor = PortalColors.Text.copy(alpha = 0.18f),
+                    // Hide the per-step tick dots — 13 of them clutter the track.
+                    activeTickColor = Color.Transparent,
+                    inactiveTickColor = Color.Transparent,
+                ),
+            )
+            // Muted range endpoints so the span (seconds → a day) is legible at a glance.
+            Row(Modifier.fillMaxWidth()) {
+                Text(
+                    fmtDelay(DELAY_PRESETS.first()),
+                    color = PortalColors.TextMuted, fontSize = 12.sp, modifier = Modifier.weight(1f),
+                )
+                Text(fmtDelay(DELAY_PRESETS.last()), color = PortalColors.TextMuted, fontSize = 12.sp)
+            }
+        }
+    }
+
     // ----------------------------------------------------------------- prefs/helpers
 
     private fun getLong(key: String, def: Long) = prefs.getLong(key, def)
@@ -456,7 +502,14 @@ class SettingsActivity : ComponentActivity() {
         private const val PREVIEW_W = 720 // 16:9 thumbnail decode size for the album preview
         private const val PREVIEW_H = 405
 
-        private val DELAY_CHOICES = longArrayOf(4000, 6000, 10000, 30000, 60000)
+        // "Time per photo" presets the slider snaps across (4 sec … 1 day, ms). Keeps the old
+        // values (4s/6s/10s/30s/60s) so previously-saved delays still land on a stop.
+        private val DELAY_PRESETS = longArrayOf(
+            4_000, 6_000, 10_000, 30_000, // seconds
+            60_000, 300_000, 600_000, 1_800_000, // 1m, 5m, 10m, 30m
+            3_600_000, 10_800_000, 21_600_000, 43_200_000, // 1h, 3h, 6h, 12h
+            86_400_000, // 1 day
+        )
         private val FADE_CHOICES = longArrayOf(2000, 1200, 500)
         private val FADE_LABELS = arrayOf("Slow", "Normal", "Fast")
 
@@ -470,9 +523,22 @@ class SettingsActivity : ComponentActivity() {
             return "Normal"
         }
 
-        private fun fmtDelay(ms: Long): String {
-            val s = ms / 1000
-            return if (s >= 60) "${s / 60}m" else "${s}s"
+        /** Index of the preset closest to [ms] (so a legacy/odd saved value still maps to a stop). */
+        private fun nearestPresetIndex(ms: Long): Int {
+            var best = 0
+            for (i in DELAY_PRESETS.indices) {
+                if (Math.abs(DELAY_PRESETS[i] - ms) < Math.abs(DELAY_PRESETS[best] - ms)) best = i
+            }
+            return best
         }
+
+        private fun fmtDelay(ms: Long): String = when {
+            ms >= 86_400_000 -> plural(ms / 86_400_000, "day")
+            ms >= 3_600_000 -> plural(ms / 3_600_000, "hour")
+            ms >= 60_000 -> "${ms / 60_000} min"
+            else -> "${ms / 1000} sec"
+        }
+
+        private fun plural(n: Long, unit: String): String = "$n $unit" + if (n == 1L) "" else "s"
     }
 }
