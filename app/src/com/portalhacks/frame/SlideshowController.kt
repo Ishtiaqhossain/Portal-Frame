@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
@@ -71,6 +72,7 @@ class SlideshowController(
     private val bigDate: TextView
     private val clockOnlyBox: LinearLayout
     private val dateLine: TextView
+    private val clockEditHint: TextView // "drag/pinch/tap" hint shown while editing the clock
     private val shimmer: ShimmerView
     private val timeFmt: DateFormat
     private val dateFmt = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
@@ -123,6 +125,13 @@ class SlideshowController(
     private var onSettings: Runnable? = null
     private var clockOnly = false // low-light mode: black screen, clock only
 
+    // Clock widget transform (long-press the clock to edit; drag to move, pinch to resize). dx/dy
+    // are translation as a fraction of screen W/H; scale is a size multiplier. Persisted to prefs.
+    private var editingClock = false
+    private var clockDx = 0f
+    private var clockDy = 0f
+    private var clockScale = 1f
+
     init {
         val dm = context.resources.displayMetrics
         reqW = if (dm.widthPixels > 0) dm.widthPixels else 1280
@@ -143,6 +152,9 @@ class SlideshowController(
         ambientColor = prefs.getBoolean(ConfigReceiver.KEY_AMBIENT, ConfigReceiver.DEFAULT_AMBIENT)
         enhance = prefs.getBoolean(ConfigReceiver.KEY_ENHANCE, ConfigReceiver.DEFAULT_ENHANCE)
         zoomFill = prefs.getBoolean(ConfigReceiver.KEY_ZOOM_FILL, ConfigReceiver.DEFAULT_ZOOM_FILL)
+        clockDx = prefs.getFloat(ConfigReceiver.KEY_CLOCK_DX, ConfigReceiver.DEFAULT_CLOCK_DX)
+        clockDy = prefs.getFloat(ConfigReceiver.KEY_CLOCK_DY, ConfigReceiver.DEFAULT_CLOCK_DY)
+        clockScale = prefs.getFloat(ConfigReceiver.KEY_CLOCK_SCALE, ConfigReceiver.DEFAULT_CLOCK_SCALE)
         monthYearFmt.timeZone = TimeZone.getTimeZone("UTC")
 
         root.setBackgroundColor(Color.BLACK)
@@ -228,7 +240,7 @@ class SlideshowController(
         dateLine = TextView(context)
         dateLine.setTextColor(0xFFF0F0F0.toInt())
         dateLine.typeface = Ui.medium(context)
-        dateLine.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+        dateLine.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
         dateLine.setShadowLayer(8f, 0f, 1f, Color.BLACK)
         clockBox = LinearLayout(context)
         clockBox.orientation = LinearLayout.VERTICAL
@@ -242,6 +254,22 @@ class SlideshowController(
         cbp.leftMargin = margin
         cbp.bottomMargin = clockBottom // match the Portal home clock's height off the bottom
         clockBox.layoutParams = cbp
+
+        // Instruction shown only while the clock is being moved/resized (long-press to enter).
+        clockEditHint = TextView(context)
+        clockEditHint.text = "Drag to move · pinch to resize · tap to finish"
+        clockEditHint.setTextColor(0xFFF0F0F0.toInt())
+        clockEditHint.typeface = Ui.medium(context)
+        clockEditHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+        clockEditHint.gravity = Gravity.CENTER_HORIZONTAL
+        clockEditHint.setShadowLayer(8f, 0f, 1f, Color.BLACK)
+        clockEditHint.visibility = View.GONE
+        val cehp = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+        )
+        cehp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        cehp.topMargin = Ui.dp(context, 40f)
+        clockEditHint.layoutParams = cehp
 
         // Warm overlay over the photo that fades in at night (Ambient-EQ-lite): the
         // image is dimmed by the window brightness and tinted cozy-warm here.
@@ -325,7 +353,9 @@ class SlideshowController(
         root.addView(info)
         root.addView(clockBox)
         root.addView(clockOnlyBox)
+        root.addView(clockEditHint)
         root.addView(buildTouchOverlay())
+        clockBox.post { applyClockTransformNow() } // apply saved position/size once laid out
 
         // Run clock/night + weather + shimmer from the start so they're alive even
         // during the initial "Loading…" wait before the first photo arrives.
@@ -347,6 +377,82 @@ class SlideshowController(
 
     fun setStatusHint(text: String?) {
         status.text = text
+    }
+
+    // ------------------------------------------------ clock move/resize
+
+    /** Re-read the clock transform from prefs and apply it (e.g. after a Settings "reset"). */
+    fun applyClockTransform() {
+        val p = context.getSharedPreferences(ConfigReceiver.PREFS, Context.MODE_PRIVATE)
+        clockDx = p.getFloat(ConfigReceiver.KEY_CLOCK_DX, ConfigReceiver.DEFAULT_CLOCK_DX)
+        clockDy = p.getFloat(ConfigReceiver.KEY_CLOCK_DY, ConfigReceiver.DEFAULT_CLOCK_DY)
+        clockScale = p.getFloat(ConfigReceiver.KEY_CLOCK_SCALE, ConfigReceiver.DEFAULT_CLOCK_SCALE)
+        clockBox.post { applyClockTransformNow() }
+    }
+
+    private fun applyClockTransformNow() {
+        clockBox.pivotX = clockBox.width / 2f
+        clockBox.pivotY = clockBox.height / 2f
+        clockBox.scaleX = clockScale
+        clockBox.scaleY = clockScale
+        clockBox.translationX = clockDx * reqW
+        clockBox.translationY = clockDy * reqH
+    }
+
+    private fun persistClockTransform() {
+        context.getSharedPreferences(ConfigReceiver.PREFS, Context.MODE_PRIVATE).edit()
+            .putFloat(ConfigReceiver.KEY_CLOCK_DX, clockDx)
+            .putFloat(ConfigReceiver.KEY_CLOCK_DY, clockDy)
+            .putFloat(ConfigReceiver.KEY_CLOCK_SCALE, clockScale)
+            .apply()
+    }
+
+    /** True if (x,y) in root coords falls on the clock (its scaled bounds, padded for easy grab). */
+    private fun isOnClock(x: Float, y: Float): Boolean {
+        if (clockBox.width == 0) return false
+        val pad = Ui.dp(context, 24f)
+        val cx = clockBox.left + clockBox.translationX + clockBox.width / 2f
+        val cy = clockBox.top + clockBox.translationY + clockBox.height / 2f
+        val halfW = clockBox.width / 2f * clockScale + pad
+        val halfH = clockBox.height / 2f * clockScale + pad
+        return x >= cx - halfW && x <= cx + halfW && y >= cy - halfH && y <= cy + halfH
+    }
+
+    private fun enterClockEdit() {
+        editingClock = true
+        clockBox.background = Ui.roundRect(0x33000000, Ui.dp(context, 14f)).apply {
+            setStroke(Ui.dp(context, 2f), Ui.BLUE)
+        }
+        clockEditHint.visibility = View.VISIBLE
+    }
+
+    private fun exitClockEdit() {
+        editingClock = false
+        clockBox.background = null
+        clockEditHint.visibility = View.GONE
+        persistClockTransform()
+    }
+
+    /** Move the clock by a touch delta, clamped so its centre stays on screen. */
+    private fun dragClockBy(dx: Float, dy: Float) {
+        val baseCx = clockBox.left + clockBox.width / 2f
+        val baseCy = clockBox.top + clockBox.height / 2f
+        val edge = Ui.dp(context, 8f).toFloat()
+        val w = if (reqW > 0) reqW.toFloat() else clockBox.rootView.width.toFloat()
+        val h = if (reqH > 0) reqH.toFloat() else clockBox.rootView.height.toFloat()
+        val tx = (clockBox.translationX + dx).coerceIn(edge - baseCx, w - edge - baseCx)
+        val ty = (clockBox.translationY + dy).coerceIn(edge - baseCy, h - edge - baseCy)
+        clockBox.translationX = tx
+        clockBox.translationY = ty
+        if (w > 0) clockDx = tx / w
+        if (h > 0) clockDy = ty / h
+    }
+
+    private fun applyClockScale() {
+        clockBox.pivotX = clockBox.width / 2f
+        clockBox.pivotY = clockBox.height / 2f
+        clockBox.scaleX = clockScale
+        clockBox.scaleY = clockScale
     }
 
     private fun newImageView(): ImageView {
@@ -371,7 +477,13 @@ class SlideshowController(
             private var downX = 0f
             private var downY = 0f
             private var downTime = 0L
+            private var lastX = 0f
+            private var lastY = 0f
             private var handled = false
+            private var moved = false
+            private var pinching = false
+            private var pinchStartDist = 0f
+            private var pinchBaseScale = 1f
             private var pendingLong: Runnable? = null
 
             private fun cancelLong() {
@@ -381,28 +493,62 @@ class SlideshowController(
                 }
             }
 
+            private fun twoPointerDist(e: MotionEvent): Float {
+                if (e.pointerCount < 2) return 0f
+                return Math.hypot(
+                    (e.getX(0) - e.getX(1)).toDouble(), (e.getY(0) - e.getY(1)).toDouble(),
+                ).toFloat()
+            }
+
             override fun onTouch(v: View, e: MotionEvent): Boolean {
                 when (e.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        downX = e.x
-                        downY = e.y
+                        downX = e.x; downY = e.y; lastX = e.x; lastY = e.y
                         downTime = e.eventTime
                         handled = false
+                        moved = false
+                        pinching = false
                         v.parent?.requestDisallowInterceptTouchEvent(true)
                         cancelLong()
-                        if (onSettings != null) {
-                            val pl = Runnable {
-                                pendingLong = null
-                                handled = true // suppress the tap-dismiss on release
-                                onSettings?.run()
+                        if (!editingClock) {
+                            // Long-press ON the clock → grab it for edit; elsewhere → settings.
+                            val onClock = isOnClock(e.x, e.y)
+                            if (onClock || onSettings != null) {
+                                val pl = Runnable {
+                                    pendingLong = null
+                                    handled = true // suppress the tap-dismiss on release
+                                    if (onClock) enterClockEdit() else onSettings?.run()
+                                }
+                                pendingLong = pl
+                                handler.postDelayed(pl, LONG_PRESS_MS)
                             }
-                            pendingLong = pl
-                            handler.postDelayed(pl, LONG_PRESS_MS)
+                        }
+                        return true
+                    }
+                    MotionEvent.ACTION_POINTER_DOWN -> {
+                        if (editingClock) {
+                            cancelLong()
+                            pinching = true
+                            pinchStartDist = twoPointerDist(e)
+                            pinchBaseScale = clockScale
                         }
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        if (!handled) {
+                        if (editingClock) {
+                            if (pinching && e.pointerCount >= 2) {
+                                val d = twoPointerDist(e)
+                                if (pinchStartDist > 0f) {
+                                    clockScale = (pinchBaseScale * d / pinchStartDist)
+                                        .coerceIn(CLOCK_SCALE_MIN, CLOCK_SCALE_MAX)
+                                    applyClockScale()
+                                }
+                            } else {
+                                dragClockBy(e.x - lastX, e.y - lastY)
+                                lastX = e.x; lastY = e.y
+                                if (abs(e.x - downX) > TAP_SLOP || abs(e.y - downY) > TAP_SLOP) moved = true
+                            }
+                        } else if (!handled) {
                             val dx = e.x - downX
                             val dy = e.y - downY
                             if (abs(dx) > TAP_SLOP || abs(dy) > TAP_SLOP) {
@@ -410,27 +556,40 @@ class SlideshowController(
                             }
                             if (abs(dx) > SWIPE_MIN_DISTANCE && abs(dx) > abs(dy)) {
                                 handled = true
-                                if (dx < 0) {
-                                    showNext()
-                                } else {
-                                    showPrevious()
-                                }
+                                if (dx < 0) showNext() else showPrevious()
                             }
+                        }
+                        return true
+                    }
+                    MotionEvent.ACTION_POINTER_UP -> {
+                        if (editingClock && pinching) {
+                            persistClockTransform()
+                            pinching = false
+                            // Continue dragging with whichever pointer remains (avoid a jump).
+                            val rem = if (e.actionIndex == 0) 1 else 0
+                            if (e.pointerCount > rem) { lastX = e.getX(rem); lastY = e.getY(rem) }
+                            moved = true
                         }
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
                         cancelLong()
-                        val dx = e.x - downX
-                        val dy = e.y - downY
-                        val dt = e.eventTime - downTime
-                        if (!handled) {
+                        if (editingClock) {
+                            val dt = e.eventTime - downTime
+                            if (!moved && !pinching && abs(e.x - downX) < TAP_SLOP &&
+                                abs(e.y - downY) < TAP_SLOP && dt < TAP_TIMEOUT_MS
+                            ) {
+                                exitClockEdit() // a clean tap finishes editing
+                            } else {
+                                persistClockTransform() // a drag/pinch ended — stay in edit mode
+                            }
+                            pinching = false
+                        } else if (!handled) {
+                            val dx = e.x - downX
+                            val dy = e.y - downY
+                            val dt = e.eventTime - downTime
                             if (abs(dx) > SWIPE_MIN_DISTANCE && abs(dx) > abs(dy)) {
-                                if (dx < 0) {
-                                    showNext()
-                                } else {
-                                    showPrevious()
-                                }
+                                if (dx < 0) showNext() else showPrevious()
                             } else if (abs(dx) < TAP_SLOP && abs(dy) < TAP_SLOP &&
                                 dt < TAP_TIMEOUT_MS && onDismiss != null
                             ) {
@@ -441,6 +600,7 @@ class SlideshowController(
                     }
                     MotionEvent.ACTION_CANCEL -> {
                         cancelLong()
+                        if (editingClock) { pinching = false; persistClockTransform() }
                         return true
                     }
                     else -> return true
@@ -1072,6 +1232,7 @@ class SlideshowController(
             return // night tint still updates above; the overlay clock/weather text is off
         }
         clock.text = time
+        trimLeftBearing(clock)
         val w = weather
         if (w == null) {
             dateLine.text = date
@@ -1089,6 +1250,20 @@ class SlideshowController(
         } else {
             dateLine.text = date + "   " + w.label()
         }
+        trimLeftBearing(dateLine)
+    }
+
+    /**
+     * Remove a TextView's first-glyph left side-bearing by setting a matching negative left padding,
+     * so the visible text starts flush at the view's left edge. Applied to the clock and the date
+     * line (which use different fonts) so their left edges line up exactly.
+     */
+    private fun trimLeftBearing(tv: TextView) {
+        val s = tv.text?.toString() ?: return
+        if (s.isEmpty()) return
+        val r = Rect()
+        tv.paint.getTextBounds(s, 0, 1, r)
+        tv.setPadding(-r.left, 0, 0, 0)
     }
 
     // ---------------------------------------------------------------- weather
@@ -1207,6 +1382,8 @@ class SlideshowController(
         // Cap the Ken Burns animation length so long "time per photo" values (up to a day) don't
         // run a multi-hour ValueAnimator; past this the motion holds at its end frame.
         private const val KEN_BURNS_MAX_MS = 30_000L
+        private const val CLOCK_SCALE_MIN = 0.5f // pinch-to-resize bounds for the clock widget
+        private const val CLOCK_SCALE_MAX = 3.0f
         private const val SWIPE_FADE_MS = 300L // manual swipe fade
         private const val SWIPE_MIN_DISTANCE = 60f
         private const val TAP_SLOP = 30f

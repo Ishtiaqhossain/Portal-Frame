@@ -124,6 +124,8 @@ class SlideshowComposeActivity : ComponentActivity() {
         // Clear any photo retained from a previous run so re-entering the frame
         // doesn't flash the old image before the first new frame loads.
         controller.blank()
+        // Re-apply the clock position/size (picks up a Settings "reset" done while away).
+        controller.applyClockTransform()
         val prefs = getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE)
 
         // "Only show clock in low light": watch the ambient light sensor when enabled.

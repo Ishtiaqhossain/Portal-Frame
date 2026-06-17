@@ -109,6 +109,12 @@ class ConfigReceiver : BroadcastReceiver() {
         const val KEY_ENHANCE = "auto_enhance"  // boolean: on-device auto-levels + vibrance
         const val KEY_ZOOM_FILL = "zoom_fill"   // boolean: zoom-crop SINGLE photos to fill (vs whole
                                                 // photo over a blurred fill). Pairs always fill.
+        // Clock widget transform (set by long-press-drag/pinch on the screensaver). dx/dy are the
+        // translation from the default bottom-left anchor as a fraction of screen W/H; scale is a
+        // size multiplier. Floats.
+        const val KEY_CLOCK_DX = "clock_dx"
+        const val KEY_CLOCK_DY = "clock_dy"
+        const val KEY_CLOCK_SCALE = "clock_scale"
         const val DEFAULT_DELAY_MS = 6000L
         const val DEFAULT_FADE_MS = 1200L
         const val DEFAULT_PAIRS = false
@@ -122,6 +128,9 @@ class ConfigReceiver : BroadcastReceiver() {
         const val DEFAULT_AMBIENT = true
         const val DEFAULT_ENHANCE = false
         const val DEFAULT_ZOOM_FILL = false // default: whole photo over a blurred fill (no zoom)
+        const val DEFAULT_CLOCK_DX = 0f
+        const val DEFAULT_CLOCK_DY = 0f
+        const val DEFAULT_CLOCK_SCALE = 1f
 
         // ADB-settable boolean extras (extra name -> pref key) for quick testing, e.g.
         //   adb shell am broadcast -n com.portalhacks.frame/.ConfigReceiver --ez ken_burns false

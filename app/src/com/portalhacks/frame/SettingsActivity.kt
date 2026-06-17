@@ -209,7 +209,19 @@ class SettingsActivity : ComponentActivity() {
                 Divider()
                 ToggleRow("Ambient color glow", ConfigReceiver.KEY_AMBIENT, true) { tick++ }
                 Divider()
-                ToggleRow("Clock & weather", ConfigReceiver.KEY_CLOCK, true) { tick++ }
+                ToggleRow(
+                    "Clock & weather", ConfigReceiver.KEY_CLOCK, true,
+                    subtitle = "Long-press the clock on the screensaver to move or resize it.",
+                ) { tick++ }
+                Divider()
+                CycleRow("Clock position & size", "Reset") {
+                    prefs.edit()
+                        .putFloat(ConfigReceiver.KEY_CLOCK_DX, ConfigReceiver.DEFAULT_CLOCK_DX)
+                        .putFloat(ConfigReceiver.KEY_CLOCK_DY, ConfigReceiver.DEFAULT_CLOCK_DY)
+                        .putFloat(ConfigReceiver.KEY_CLOCK_SCALE, ConfigReceiver.DEFAULT_CLOCK_SCALE)
+                        .apply()
+                    tick++
+                }
                 Divider()
                 ToggleRow("Only clock in low light", ConfigReceiver.KEY_CLOCK_LOW_LIGHT, ConfigReceiver.DEFAULT_CLOCK_LOW_LIGHT) { tick++ }
                 Divider()
