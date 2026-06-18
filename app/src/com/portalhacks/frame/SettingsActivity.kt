@@ -56,10 +56,9 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 /**
- * The Photos setup/settings screen, in Jetpack Compose (migration Milestone 3).
- * Replaces the view-based status screen; reuses the existing prefs
- * ({@link ConfigReceiver}) and hands off to the Java {@link PhotosActivity} for
- * the camera scanner / manual entry (those flows are ported in a later milestone).
+ * The Photos setup/settings screen, in Jetpack Compose. Reads/writes the shared
+ * prefs ([ConfigReceiver]) and hands off to [PhotosActivity] for the camera
+ * scanner / manual link entry.
  */
 class SettingsActivity : ComponentActivity() {
 
@@ -319,7 +318,7 @@ class SettingsActivity : ComponentActivity() {
                         val id = a.slides[0].id
                         runOnUiThread {
                             if (Albums.list(prefs).contains(url)) {
-                                title = a.title ?: ""
+                                title = a.title
                                 loader.load(id, PREVIEW_W, PREVIEW_H, zoomFill, onBitmap)
                             }
                         }

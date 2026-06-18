@@ -1,7 +1,6 @@
 package com.portalhacks.frame
 
 import android.app.Activity
-import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -17,9 +16,7 @@ import android.hardware.Camera
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.text.InputType
-import android.text.TextUtils
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -73,8 +70,6 @@ class PhotosActivity : Activity() {
 
     @Volatile
     private var scanning = false
-    private var stopArmed = false // "Stop showing photos" two-tap confirm
-    private var showingStatus = false // re-check screensaver state on return
     private var previewW = 0
     private var previewH = 0 // cached so we don't hit getParameters() per frame
     private var frameCount = 0
@@ -97,22 +92,9 @@ class PhotosActivity : Activity() {
         root = FrameLayout(this)
         root.setBackgroundColor(Ui.BG)
         setContentView(root)
-        // The Compose SettingsActivity hands off here for the camera / manual flows.
-        val gotoExtra = intent?.getStringExtra("goto")
-        when (gotoExtra) {
-            "scan" -> startScan()
-            "manual" -> startScan() // manual entry now lives inside the scanner panel
-            else -> showStatus()
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // Returning from the system Screen-saver picker: refresh the status so the
-        // "Screensaver" card reflects the new selection.
-        if (showingStatus) {
-            showStatus()
-        }
+        // The Compose SettingsActivity hands off here purely for the camera scanner /
+        // manual-entry panel (it owns all other settings).
+        startScan()
     }
 
     override fun onPause() {
@@ -142,257 +124,10 @@ class PhotosActivity : Activity() {
         }
     }
 
-    // ------------------------------------------------ screensaver setup
-
-    /** True if Portal Frame is the enabled system screensaver. */
-    private fun isOurScreensaver(): Boolean {
-        return try {
-            val enabled = Settings.Secure.getInt(
-                contentResolver, "screensaver_enabled", 0,
-            ) == 1
-            val comp = Settings.Secure.getString(contentResolver, "screensaver_components")
-            enabled && comp != null && comp.contains(packageName)
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    /**
-     * Deep-link to the system Screen-saver picker, where the user selects
-     * "Portal Frame". A normal app can't set the screensaver itself (it needs
-     * WRITE_SECURE_SETTINGS), but the Settings app can — so this is the no-ADB path.
-     */
-    private fun openScreensaverSettings() {
-        try {
-            startActivity(Intent(Settings.ACTION_DREAM_SETTINGS))
-        } catch (e: Exception) {
-            toast("Open Settings → Display → Screen saver, then choose Frame")
-        }
-    }
-
     // ---------------------------------------------------------------- prefs
 
     private fun prefs(): SharedPreferences =
         getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE)
-
-    private fun album(): String = Albums.list(prefs()).firstOrNull() ?: ""
-
-    private fun getDelay(): Long =
-        prefs().getLong(ConfigReceiver.KEY_DELAY_MS, ConfigReceiver.DEFAULT_DELAY_MS)
-
-    private fun getFade(): Long =
-        prefs().getLong(ConfigReceiver.KEY_FADE_MS, ConfigReceiver.DEFAULT_FADE_MS)
-
-    private fun getShuffle(): Boolean = prefs().getBoolean(ConfigReceiver.KEY_SHUFFLE, false)
-
-    private fun getPairs(): Boolean =
-        prefs().getBoolean(ConfigReceiver.KEY_PAIRS, ConfigReceiver.DEFAULT_PAIRS)
-
-    // ------------------------------------------------------- Status / settings
-
-    private fun showStatus() {
-        stopCamera()
-        stopArmed = false
-        showingStatus = true
-        root.removeAllViews()
-        val col = Ui.screen(this, root, Ui.MAX_W_WIDE_DP)
-
-        val url = album()
-        val hasAlbum = url.isNotEmpty()
-
-        col.addView(Ui.title(this, if (hasAlbum) "Your photos" else "Show your photos"))
-
-        val panes = Ui.twoColumns(this, col)
-        val left = panes[0]
-        val right = panes[1]
-
-        // ---------------------------------------------------- LEFT: Source
-        // Screensaver — the slideshow only runs once "Portal Frame" is chosen in
-        // the system picker (a normal app can't set this itself).
-        val ssActive = isOurScreensaver()
-        val ssCard = Ui.card(this)
-        ssCard.addView(Ui.sectionLabel(this, "Screensaver"))
-        val ssBody = Ui.body(
-            this,
-            if (ssActive) {
-                "✓ Frame is your screensaver. Your photos appear when the Portal is idle."
-            } else {
-                "Almost there — tap below, then choose “Frame” so your photos show " +
-                    "when the Portal is idle."
-            },
-        )
-        topMargin(ssBody, 6)
-        ssCard.addView(ssBody)
-        ssCard.addView(
-            if (ssActive) {
-                Ui.outline(this, "Change screensaver") { openScreensaverSettings() }
-            } else {
-                Ui.primary(this, "Use as screensaver") { openScreensaverSettings() }
-            },
-        )
-        left.addView(ssCard)
-
-        // Album
-        val albumCard = Ui.card(this)
-        albumCard.addView(Ui.sectionLabel(this, if (hasAlbum) "Album" else "No album yet"))
-        if (hasAlbum) {
-            val u = Ui.body(this, url)
-            u.setTextColor(Ui.BLUE)
-            u.setSingleLine(true)
-            u.ellipsize = TextUtils.TruncateAt.MIDDLE
-            topMargin(u, 6)
-            albumCard.addView(u)
-        } else {
-            val none = Ui.body(
-                this,
-                "Add a Google Photos or iCloud shared album to show your own photos.",
-            )
-            topMargin(none, 6)
-            albumCard.addView(none)
-        }
-        albumCard.addView(
-            Ui.primary(this, if (hasAlbum) "Change album" else "Add album") { startScan() },
-        )
-        albumCard.addView(
-            Ui.outline(this, "Enter link manually") { startScan() },
-        )
-        if (hasAlbum) {
-            val stop = Ui.destructive(this, "Stop showing photos", null)
-            stop.setOnClickListener {
-                if (!stopArmed) {
-                    stopArmed = true
-                    stop.text = "Tap again to confirm"
-                } else {
-                    Albums.clear(prefs())
-                    toast("Showing sample photos")
-                    showStatus()
-                }
-            }
-            albumCard.addView(stop)
-        }
-        left.addView(albumCard)
-
-        // ------------------------------------------------- RIGHT: Slideshow
-        val slideCard = Ui.card(this)
-        slideCard.addView(Ui.sectionLabel(this, "Slideshow"))
-
-        val delayRow = Ui.row(this, "Seconds per photo", fmtDelay(getDelay()), null)
-        delayRow.setOnClickListener {
-            val next = cycle(DELAY_CHOICES, getDelay(), 0)
-            prefs().edit().putLong(ConfigReceiver.KEY_DELAY_MS, next).apply()
-            Ui.setRowValue(delayRow, fmtDelay(next))
-        }
-        topMargin(delayRow, 8)
-        slideCard.addView(delayRow)
-        slideCard.addView(Ui.hairline(this))
-
-        val shuffleRow = Ui.row(this, "Shuffle photos", if (getShuffle()) "On" else "Off", null)
-        shuffleRow.setOnClickListener {
-            val next = !getShuffle()
-            prefs().edit().putBoolean(ConfigReceiver.KEY_SHUFFLE, next).apply()
-            Ui.setRowValue(shuffleRow, if (next) "On" else "Off")
-        }
-        slideCard.addView(shuffleRow)
-        slideCard.addView(Ui.hairline(this))
-
-        val fadeRow = Ui.row(this, "Transition", fadeLabel(getFade()), null)
-        fadeRow.setOnClickListener {
-            val next = cycle(FADE_CHOICES, getFade(), 1)
-            prefs().edit().putLong(ConfigReceiver.KEY_FADE_MS, next).apply()
-            Ui.setRowValue(fadeRow, fadeLabel(next))
-        }
-        slideCard.addView(fadeRow)
-        slideCard.addView(Ui.hairline(this))
-
-        val pairsRow = Ui.row(this, "Side-by-side portraits", if (getPairs()) "On" else "Off", null)
-        pairsRow.setOnClickListener {
-            val next = !getPairs()
-            prefs().edit().putBoolean(ConfigReceiver.KEY_PAIRS, next).apply()
-            Ui.setRowValue(pairsRow, if (next) "On" else "Off")
-        }
-        slideCard.addView(pairsRow)
-        slideCard.addView(Ui.hairline(this))
-        slideCard.addView(
-            boolRow(
-                "Cinematic motion",
-                ConfigReceiver.KEY_KEN_BURNS, ConfigReceiver.DEFAULT_KEN_BURNS,
-            ),
-        )
-        slideCard.addView(Ui.hairline(this))
-        slideCard.addView(
-            boolRow(
-                "Photo captions",
-                ConfigReceiver.KEY_CAPTIONS, ConfigReceiver.DEFAULT_CAPTIONS,
-            ),
-        )
-        right.addView(slideCard)
-
-        // Ambient & on-device AI demos
-        val aiCard = Ui.card(this)
-        aiCard.addView(Ui.sectionLabel(this, "Ambient intelligence"))
-        val faceRow = boolRow(
-            "Face-aware framing",
-            ConfigReceiver.KEY_FACE, ConfigReceiver.DEFAULT_FACE,
-        )
-        topMargin(faceRow, 8)
-        aiCard.addView(faceRow)
-        aiCard.addView(Ui.hairline(this))
-        aiCard.addView(
-            boolRow(
-                "Auto-enhance photos",
-                ConfigReceiver.KEY_ENHANCE, ConfigReceiver.DEFAULT_ENHANCE,
-            ),
-        )
-        aiCard.addView(Ui.hairline(this))
-        aiCard.addView(
-            boolRow(
-                "Ambient color glow",
-                ConfigReceiver.KEY_AMBIENT, ConfigReceiver.DEFAULT_AMBIENT,
-            ),
-        )
-        aiCard.addView(Ui.hairline(this))
-        aiCard.addView(
-            boolRow(
-                "Clock & weather",
-                ConfigReceiver.KEY_CLOCK, ConfigReceiver.DEFAULT_CLOCK,
-            ),
-        )
-        aiCard.addView(Ui.hairline(this))
-        aiCard.addView(
-            boolRow(
-                "Night warmth",
-                ConfigReceiver.KEY_NIGHT, ConfigReceiver.DEFAULT_NIGHT,
-            ),
-        )
-        aiCard.addView(Ui.hairline(this))
-        aiCard.addView(
-            boolRow(
-                "On This Day memories",
-                ConfigReceiver.KEY_ON_THIS_DAY, ConfigReceiver.DEFAULT_ON_THIS_DAY,
-            ),
-        )
-        right.addView(aiCard)
-
-        // Tips
-        val tipsCard = Ui.card(this)
-        tipsCard.addView(Ui.sectionLabel(this, "Tips"))
-        val howto = Ui.body(
-            this,
-            "On your phone: open Google Photos, open the album you want, tap Share, and " +
-                "choose Create link / show its QR code. Then tap " +
-                (if (hasAlbum) "Change album" else "Add album") +
-                " here and hold your phone up to this screen.\n\n" +
-                "Tip: the album must be shared by link so the frame can see it.",
-        )
-        topMargin(howto, 6)
-        tipsCard.addView(howto)
-        right.addView(tipsCard)
-
-        // ----------------------------------------------------------- Done
-        val done = Ui.secondary(this, "Done") { finish() }
-        topMargin(done, 24)
-        col.addView(done)
-    }
 
     private fun topMargin(v: View, dp: Int) {
         var lp = v.layoutParams as? LinearLayout.LayoutParams
@@ -415,20 +150,8 @@ class PhotosActivity : Activity() {
         return t
     }
 
-    /** A tappable On/Off row bound to a boolean pref. */
-    private fun boolRow(label: String, key: String, def: Boolean): View {
-        val row = Ui.row(this, label, if (prefs().getBoolean(key, def)) "On" else "Off", null)
-        row.setOnClickListener {
-            val next = !prefs().getBoolean(key, def)
-            prefs().edit().putBoolean(key, next).apply()
-            Ui.setRowValue(row, if (next) "On" else "Off")
-        }
-        return row
-    }
-
     // ------------------------------------------------ Manual entry
 
-    /** Type/paste the album link using the on-screen keyboard (QR-less fallback). */
     /**
      * "Done" on the add screen: add the pasted link (if any) and close. An empty field just
      * closes (e.g. after a QR scan already added one); an invalid link warns and stays.
@@ -502,8 +225,6 @@ class PhotosActivity : Activity() {
     }
 
     private fun showScanner() {
-        stopArmed = false
-        showingStatus = false
         root.removeAllViews()
 
         val f = FrameLayout(this)
@@ -1050,12 +771,6 @@ class PhotosActivity : Activity() {
         private const val DEFAULT_SCAN_HINT =
             "Point the QR at the camera and slowly move it back and forth a few times until it " +
                 "scans. Or paste the link below."
-        private const val SCREENSAVER_COMPONENT =
-            "com.portalhacks.frame/com.portalhacks.frame.FrameDreamService"
-
-        private val DELAY_CHOICES = longArrayOf(4000L, 6000L, 10000L, 30000L, 60000L)
-        private val FADE_CHOICES = longArrayOf(2000L, 1200L, 500L) // Slow, Normal, Fast
-        private val FADE_LABELS = arrayOf("Slow", "Normal", "Fast")
 
         private val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -1064,29 +779,6 @@ class PhotosActivity : Activity() {
             EnumMap<DecodeHintType, Any>(DecodeHintType::class.java).apply {
                 put(DecodeHintType.TRY_HARDER, java.lang.Boolean.TRUE)
             }
-
-        private fun cycle(choices: LongArray, cur: Long, fallback: Int): Long {
-            for (i in choices.indices) {
-                if (choices[i] == cur) {
-                    return choices[(i + 1) % choices.size]
-                }
-            }
-            return choices[fallback]
-        }
-
-        private fun fadeLabel(ms: Long): String {
-            for (i in FADE_CHOICES.indices) {
-                if (FADE_CHOICES[i] == ms) {
-                    return FADE_LABELS[i]
-                }
-            }
-            return "Normal"
-        }
-
-        private fun fmtDelay(ms: Long): String {
-            val s = ms / 1000
-            return if (s >= 60) "${s / 60}m" else "${s}s"
-        }
 
         private fun pickCamera(): Int {
             val n = Camera.getNumberOfCameras()
