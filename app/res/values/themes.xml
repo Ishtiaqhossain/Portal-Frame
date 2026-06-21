@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-      Slideshow window theme. windowDisablePreview stops the framework from showing
-      a starting window on (re)launch — otherwise a warm start / the dream re-entry
-      flashes the cached TASK SNAPSHOT (the previous run's photo) for ~1s before the
-      new first frame draws. windowBackground is solid black so any pre-draw gap is
-      black, not a stale image.
+      Slideshow window theme. We KEEP the framework's starting window (windowDisablePreview
+      defaults to false): with a solid-black windowBackground it paints black over the home
+      screen during the dream->Activity hand-off, so the launcher no longer flashes through the
+      ~300ms launch gap. The reason it was once disabled — a warm start flashing the cached TASK
+      SNAPSHOT (the previous run's photo) — is avoided by launching the slideshow in a fresh task
+      (FLAG_ACTIVITY_CLEAR_TASK in FrameDreamService), so there's no retained snapshot to show.
     -->
     <style name="Theme.Frame" parent="@android:style/Theme.Black.NoTitleBar.Fullscreen">
         <item name="android:windowBackground">@android:color/black</item>
-        <item name="android:windowDisablePreview">true</item>
     </style>
 
     <!--
