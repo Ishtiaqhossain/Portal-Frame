@@ -75,6 +75,7 @@ class SlideshowController(
     private val bigClock: TextView // centered, larger clock for low-light mode
     private val bigDate: TextView
     private val clockOnlyBox: LinearLayout
+    private val clockOnlyScrim: View // opaque black backing so the low-light clock never shows over a photo
     private val dateLine: TextView
     private val clockEditHint: TextView // "drag/pinch/tap" hint shown while editing the clock
     private val noteBox: TextView // sticky-note overlay (top-right); hidden when empty
@@ -422,6 +423,15 @@ class SlideshowController(
         colp.gravity = Gravity.CENTER_VERTICAL
         clockOnlyBox.layoutParams = colp
         clockOnlyBox.visibility = View.GONE
+        // Full-screen black backing for low-light mode. Sits above the photos but below the clock
+        // text, so even a stray late photo decode can never show through behind the clock — the
+        // invariant is "clock-only clock visible => screen is dark".
+        clockOnlyScrim = View(context)
+        clockOnlyScrim.setBackgroundColor(Color.BLACK)
+        clockOnlyScrim.layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT,
+        )
+        clockOnlyScrim.visibility = View.GONE
 
         if (!showClock) {
             clockBox.visibility = View.GONE
@@ -440,6 +450,7 @@ class SlideshowController(
         root.addView(status)
         root.addView(info)
         root.addView(clockBox)
+        root.addView(clockOnlyScrim)
         root.addView(clockOnlyBox)
         root.addView(clockEditHint)
         root.addView(noteBox)
@@ -967,10 +978,12 @@ class SlideshowController(
             shimmer.stopSweep()
             blank() // photos -> black
             clockBox.visibility = View.GONE // hide the bottom overlay clock
+            clockOnlyScrim.visibility = View.VISIBLE // black backing covers any photo underneath
             clockOnlyBox.visibility = View.VISIBLE // big centered clock instead
             startClock() // ensure ticking + populate the big clock now
         } else {
             clockOnlyBox.visibility = View.GONE
+            clockOnlyScrim.visibility = View.GONE
             if (!shimmerHidden) {
                 shimmer.startSweep()
             }
