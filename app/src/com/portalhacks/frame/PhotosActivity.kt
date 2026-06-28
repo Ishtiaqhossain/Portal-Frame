@@ -13,6 +13,7 @@ import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.hardware.Camera
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -40,6 +41,7 @@ import com.google.zxing.common.GlobalHistogramBinarizer
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
 import java.util.EnumMap
+import java.util.Locale
 
 /**
  * On-device setup, shown as the "Photos" app icon. Styled with the Portal design
@@ -83,6 +85,41 @@ class PhotosActivity : Activity() {
     private var curZoom = 0
     private var zoomSettle = 0 // frames to let the AE settle after a zoom change before re-judging
     private var autoExpZoom = true // false when a fixed `zoompct` override pins the level
+
+    // Per-device QR tuning — picked once. The Portal models' front cameras and screen orientations
+    // differ enough that one device's optimization regresses another (the Portal+ portrait
+    // closed-loop zoom + rotated decode passes broke the Portal Go's landscape fixed-focus lens).
+    private val tuning = QrTuning.forThisDevice()
+
+    /**
+     * Per-device QR-scanner knobs, isolated so an optimization for one Portal can't regress another.
+     */
+    private class QrTuning(
+        /** Pin digital zoom at this % of max and skip the closed-loop controller; 0 = run the loop. */
+        val fixedZoomPct: Int,
+        /** Starting zoom (% of max) for the closed-loop controller; used only when [fixedZoomPct] is 0. */
+        val loopStartZoomPct: Int,
+        /** Also try 90°/270° luma rotations when decoding — needed for portrait-mounted screens. */
+        val decodeRotations: Boolean,
+    ) {
+        companion object {
+            fun forThisDevice(): QrTuning {
+                val id = (Build.DEVICE + " " + Build.MODEL + " " + Build.PRODUCT).lowercase(Locale.US)
+                return when {
+                    // Portal Go (codename "terry"): landscape screen, fixed-focus ultra-wide front
+                    // camera. A pinned high zoom both enlarges the QR and forces the AE to expose for
+                    // the bright screen; the screen is always landscape, so rotated decode passes only
+                    // burn frame budget. This is the original known-good recipe (commit 6f2e712).
+                    id.contains("terry") || id.contains("portalgo") ->
+                        QrTuning(fixedZoomPct = 90, loopStartZoomPct = 90, decodeRotations = false)
+                    // Portal / Portal+ (can be mounted portrait) and any unknown device: the adaptive
+                    // closed-loop zoom + rotated decode passes added for the vertical screen.
+                    else ->
+                        QrTuning(fixedZoomPct = 0, loopStartZoomPct = 70, decodeRotations = true)
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -391,15 +428,18 @@ class PhotosActivity : Activity() {
             // on top of this; here we just set the starting zoom. zoompct pins it (testing).
             if (pr.isZoomSupported) {
                 maxZoomIdx = pr.maxZoom
-                val fixed = intent?.getIntExtra("zoompct", 0) ?: 0
-                if (fixed > 0) {
-                    autoExpZoom = false // pin one level for testing
-                    curZoom = Math.max(0, Math.min(maxZoomIdx, maxZoomIdx * fixed / 100))
+                // A `zoompct` intent extra overrides the profile (testing); otherwise the device's
+                // QrTuning decides: a pinned fixed zoom (Portal Go) or the closed-loop's start (others).
+                val override = intent?.getIntExtra("zoompct", 0) ?: 0
+                val pinPct = if (override > 0) override else tuning.fixedZoomPct
+                if (pinPct > 0) {
+                    autoExpZoom = false // pinned level — the closed loop in previewCb stays off
+                    curZoom = Math.max(0, Math.min(maxZoomIdx, maxZoomIdx * pinPct / 100))
                 } else {
                     autoExpZoom = true
                     // Start fairly tight: a bright screen needs heavy fill to expose down, and the
                     // loop backs the zoom off again if that overshoots too dark.
-                    curZoom = Math.max(0, Math.min(maxZoomIdx, maxZoomIdx * 70 / 100))
+                    curZoom = Math.max(0, Math.min(maxZoomIdx, maxZoomIdx * tuning.loopStartZoomPct / 100))
                 }
                 pr.zoom = curZoom
                 zoomSettle = AE_SETTLE_FRAMES
@@ -604,13 +644,17 @@ class PhotosActivity : Activity() {
      * The camera sensor always delivers a landscape frame regardless of how the Portal screen is
      * mounted, so on a vertically-held device the QR — upright to the user — sits rotated 90° in
      * the frame. We decode the frame as-is first (the fast path, and what a landscape screen
-     * needs), then, only if that fails, re-decode the luma rotated upright, trying both 90° and
-     * 270° to cover either portrait mount.
+     * needs), then, only if that fails and the device can be mounted portrait ([QrTuning.decodeRotations]),
+     * re-decode the luma rotated upright, trying both 90° and 270° to cover either portrait mount.
+     * Skipping the rotations on a landscape-only device (Portal Go) cuts decode work ~3× per frame,
+     * which keeps the frame rate up so sharp frames actually get a decode pass.
      */
     private fun tryDecode(data: ByteArray, w: Int, h: Int): String? {
         decodeAllRegions(data, w, h)?.let { return it }
-        decodeAllRegions(rotateLuma(data, w, h, true), h, w)?.let { return it }
-        decodeAllRegions(rotateLuma(data, w, h, false), h, w)?.let { return it }
+        if (tuning.decodeRotations) {
+            decodeAllRegions(rotateLuma(data, w, h, true), h, w)?.let { return it }
+            decodeAllRegions(rotateLuma(data, w, h, false), h, w)?.let { return it }
+        }
         return null
     }
 
