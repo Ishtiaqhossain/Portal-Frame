@@ -1,6 +1,9 @@
 package com.portalhacks.frame
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -42,6 +45,15 @@ class SlideshowComposeActivity : ComponentActivity() {
     private var currentAlbums: List<String> = emptyList()
     private var currentIds: List<String> = ArrayList()
 
+    // "AirDrop for Portal": photos arrive via the always-on DropServerService, which
+    // broadcasts ACTION_UPLOAD when one lands so we can show it immediately.
+    private var uploadReceiverRegistered = false
+    private val uploadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            onLocalUploadChanged()
+        }
+    }
+
     private val sensorManager by lazy { getSystemService(SENSOR_SERVICE) as SensorManager }
     private val lightSensor: Sensor? by lazy { sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT) }
 
@@ -73,6 +85,9 @@ class SlideshowComposeActivity : ComponentActivity() {
         }
 
         loader = ImageLoader(this)
+        // Run the LAN photo-drop server as an always-on foreground service so phones can
+        // push photos anytime, not just while this slideshow is on screen.
+        DropServerService.start(this)
         // Build the slideshow's View hierarchy, then host it inside Compose.
         val root = FrameLayout(this)
         controller = SlideshowController(this, root, loader).apply {
@@ -143,27 +158,42 @@ class SlideshowComposeActivity : ComponentActivity() {
         }
 
         currentAlbums = Albums.enabled(prefs)
+        DropServerService.start(this)
+        if (!uploadReceiverRegistered) {
+            registerReceiver(uploadReceiver, IntentFilter(DropServerService.ACTION_UPLOAD))
+            uploadReceiverRegistered = true
+        }
 
-        if (currentAlbums.isEmpty()) {
-            // No albums playing (none configured, or all stopped): show the bundled samples.
+        // Photos pushed onto the frame over the LAN always play, alongside any albums.
+        val local = LocalUploads.slides(this)
+        val cached = currentAlbums.flatMap { AlbumCache.read(prefs, it) ?: emptyList() }
+        val initial = cached + local
+
+        if (currentAlbums.isEmpty() && local.isEmpty()) {
+            // Nothing configured and nothing pushed: show the bundled samples.
             controller.start()
             return
         }
 
-        // Albums configured: start straight from their merged caches if we have them
-        // (disk-cached images make the first photo appear near-instantly); otherwise
-        // show a black "Loading…" screen — never the samples.
-        val cached = currentAlbums.flatMap { AlbumCache.read(prefs, it) ?: emptyList() }
-        if (cached.isNotEmpty()) {
-            currentIds = idsOf(cached)
-            controller.setItems(cached)
+        // Start straight from the caches + pushed photos if we have any (disk-cached images
+        // make the first photo appear near-instantly); otherwise a black "Loading…" screen —
+        // never the samples. When there are phone-pushed photos, open on the newest one so a
+        // freshly-added photo greets you on resume instead of being buried mid-rotation.
+        if (initial.isNotEmpty()) {
+            currentIds = idsOf(initial)
+            val newestLocal = local.firstOrNull()?.id
+            if (newestLocal != null) {
+                controller.setItemsShowing(initial, newestLocal, instant = true)
+            } else {
+                controller.setItems(initial)
+            }
         } else {
             currentIds = ArrayList()
             controller.setStatusHint("Loading photos…")
         }
 
         // Refresh now, then keep checking periodically while we're on screen.
-        fetchAllAndApply(cached.isEmpty())
+        fetchAllAndApply(initial.isEmpty())
         handler.removeCallbacks(refreshTick)
         handler.postDelayed(refreshTick, REFRESH_INTERVAL_MS)
     }
@@ -172,7 +202,32 @@ class SlideshowComposeActivity : ComponentActivity() {
         super.onPause()
         sensorManager.unregisterListener(lightListener)
         handler.removeCallbacks(refreshTick)
+        // Leave DropServerService running so photos can still arrive while we're away.
+        if (uploadReceiverRegistered) {
+            unregisterReceiver(uploadReceiver)
+            uploadReceiverRegistered = false
+        }
         controller.stop()
+    }
+
+    /**
+     * A phone just pushed photo(s) over the LAN — fold them into the slideshow and jump
+     * straight to the newest one (the in-room "tada"), instead of waiting for the rotation.
+     */
+    private fun onLocalUploadChanged() {
+        if (!::controller.isInitialized) return
+        val prefs = getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE)
+        val local = LocalUploads.slides(this)
+        val merged = currentAlbums.flatMap { AlbumCache.read(prefs, it) ?: emptyList() } + local
+        if (merged.isEmpty()) return
+        currentIds = idsOf(merged)
+        val newest = local.firstOrNull()?.id
+        if (newest != null) {
+            // Show the just-pushed photo immediately (crossfades to it).
+            controller.setItemsShowing(merged, newest)
+        } else {
+            controller.setItems(merged)
+        }
     }
 
     private val refreshTick = object : Runnable {
@@ -216,7 +271,8 @@ class SlideshowComposeActivity : ComponentActivity() {
         if (currentAlbums != Albums.enabled(prefs)) {
             return // the playing album set changed while fetching
         }
-        val merged = currentAlbums.flatMap { AlbumCache.read(prefs, it) ?: emptyList() }
+        val merged = currentAlbums.flatMap { AlbumCache.read(prefs, it) ?: emptyList() } +
+            LocalUploads.slides(this)
         if (merged.isEmpty()) {
             if (showHint) controller.setStatusHint("Couldn't load photos — retrying later")
             return
@@ -224,7 +280,14 @@ class SlideshowComposeActivity : ComponentActivity() {
         val ids = idsOf(merged)
         if (ids != currentIds) {
             currentIds = ids
-            controller.setItems(merged)
+            // Preserve whatever photo is showing (e.g. a just-pushed upload) across the
+            // rebuild instead of snapping back to index 0 when an album fetch changes the set.
+            val cur = controller.currentId()
+            if (cur != null && ids.contains(cur)) {
+                controller.setItemsShowing(merged, cur, instant = true)
+            } else {
+                controller.setItems(merged)
+            }
         }
     }
 

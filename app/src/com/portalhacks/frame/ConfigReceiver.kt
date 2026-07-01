@@ -100,6 +100,7 @@ class ConfigReceiver : BroadcastReceiver() {
         const val KEY_ALBUMS_DISABLED = "album_urls_disabled" // JSON array of stopped album URLs
         const val KEY_GUARD = "screensaver_guard" // boolean: keep re-asserting Frame as the dream
         const val KEY_NOTES = "sticky_notes" // master switch for the whole sticky-note + fortune overlay
+        const val KEY_DROP_TOKEN = "drop_token" // secret gating the LAN photo-drop server (in its QR)
         const val KEY_NOTE = "note" // sticky-note text shown on the frame ("" = hidden)
         const val KEY_NOTE_DX = "note_dx" // note position (fraction of screen W) from its top-right anchor
         const val KEY_NOTE_DY = "note_dy" // note position (fraction of screen H) from its top-right anchor

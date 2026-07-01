@@ -1035,6 +1035,53 @@ class SlideshowController(
         showImmediate(0)
     }
 
+    /**
+     * Replace the photo set and immediately show [showId] — the just-pushed photo — so a
+     * photo dropped from a phone appears on the frame right away (the "AirDrop" tada),
+     * instead of waiting for the rotation to reach it. Falls back to the first item if
+     * [showId] isn't present.
+     */
+    fun setItemsShowing(newItems: List<Slide>?, showId: String, instant: Boolean = false) {
+        if (newItems.isNullOrEmpty()) {
+            return
+        }
+        items = ArrayList(newItems)
+        if (shuffle) {
+            smartShuffle(items)
+        }
+        if (onThisDay) {
+            promoteOnThisDay(items)
+        }
+        remote = true
+        // Set index/running BEFORE the clock-only return so that when light returns,
+        // setClockOnly(false) calls showImmediate(index) with a valid index for the new list.
+        val target = items.indexOfFirst { it.id == showId }.let { if (it < 0) 0 else it }
+        index = target
+        running = true
+        if (clockOnly) {
+            return // keep showing the clock; the new photo displays when light returns
+        }
+        handler.removeCallbacks(autoTick)
+        startClock()
+        if (showClock) {
+            startWeather()
+        }
+        startFortune()
+        if (!shimmerHidden) {
+            shimmer.startSweep()
+        }
+        if (instant) {
+            // Resume: show the photo straight away (no fade-from-black gap).
+            showImmediate(target)
+        } else {
+            // Live in-room push: crossfade from the current photo into the just-pushed one.
+            transitionTo(target, autoFadeMs)
+        }
+    }
+
+    /** The id of the photo currently displayed, or null if there isn't one. */
+    fun currentId(): String? = items.getOrNull(index)?.id
+
     fun showNext() {
         if (items.isNotEmpty()) {
             transitionTo(nextStart(index, curIsPair), SWIPE_FADE_MS)

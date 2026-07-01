@@ -47,6 +47,14 @@
             </intent-filter>
         </activity>
 
+        <!-- Full-screen grid manager for phone-pushed photos (opened from Settings). -->
+        <activity
+            android:name=".UploadsActivity"
+            android:exported="false"
+            android:label="Frame"
+            android:theme="@style/Theme.FrameSetup"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
+
         <!-- Camera QR scanner + manual entry (still view-based; SettingsActivity
              hands off here with a "goto" extra). Ported to Compose in a later step. -->
         <activity
@@ -75,6 +83,12 @@
              slot. Needs WRITE_SECURE_SETTINGS (granted over ADB); see ScreensaverGuard. -->
         <service
             android:name=".ScreensaverGuardService"
+            android:exported="false" />
+
+        <!-- Always-on LAN photo-drop server ("AirDrop for Portal"): phones push photos
+             to the frame over Wi-Fi. Foreground so it stays reachable; not exported. -->
+        <service
+            android:name=".DropServerService"
             android:exported="false" />
 
         <!-- Restarts the guard after a reboot if the user opted in. -->

@@ -1,7 +1,9 @@
 # Security Policy
 
-Frame is a sideloaded hobby app for the Meta Portal Go. There's no server component and it
-stores no accounts or credentials, but here's the trust model and how to report issues.
+Frame is a sideloaded hobby app for the Meta Portal Go. It stores no accounts or credentials,
+and its only inbound surface is an opt-in **local-network photo-drop server** (see below) used to
+push photos onto the frame from a phone on the same Wi-Fi. Here's the trust model and how to
+report issues.
 
 ## Reporting a vulnerability
 
@@ -33,8 +35,31 @@ project — but reports are appreciated and will be looked at.
   launched for testing (`am start`) and by the screensaver trampoline. It displays photos only
   and takes no untrusted parameters.
 
-- **Permissions.** `INTERNET`, `ACCESS_NETWORK_STATE`, and `CAMERA` (camera is used only for the
-  on-device QR scan, and is optional). `android:allowBackup="false"`.
+- **Local photo-drop server ("AirDrop for Portal").** `DropServerService` runs a small embedded
+  HTTP server (`LocalDropServer`, raw `ServerSocket`) so a phone on the same Wi-Fi can open the
+  frame's address in a browser and push photos onto it. The deliberate trust decisions:
+  - **Plaintext, LAN-only by design.** The server is HTTP, not HTTPS — the photos already
+    traverse the home network and there are no credentials to protect, so the cost of a
+    self-signed-cert UX (browser warnings, no trusted CA on a LAN IP) isn't worth it. This is an
+    accepted trade-off for a home-network appliance, **not** an oversight; it is intentionally
+    exempt from the app's HTTPS-only outbound policy because it is a server socket, which
+    `network_security_config.xml` does not govern. Do not expose the frame's port beyond the LAN.
+  - **Token-gated.** Every `GET`/`POST` requires a per-install secret (`DropAuth`, generated with
+    `SecureRandom`, persisted in private prefs) supplied as `?k=…`. The token is shown only in the
+    on-screen QR/URL in Settings, so a device that never scanned the frame is refused (**403**).
+    The comparison is constant-time.
+  - **Upload validation.** Posted files must pass a magic-byte image check (JPEG/PNG/WebP/GIF/HEIC);
+    the whole request body is size-capped; concurrent connections are capped; request headers are
+    bounded. The **client's filename is never used as a path** — the server mints its own name —
+    so there is no path traversal. Kept photos live in app-private `filesDir/uploads/` and are
+    bounded by count/bytes (oldest evicted).
+  - **Not exported.** `DropServerService` is `android:exported="false"`; the upload-notification
+    broadcast is package-scoped.
+
+- **Permissions.** `INTERNET`, `ACCESS_NETWORK_STATE`, `CAMERA` (on-device QR scan, optional),
+  `FOREGROUND_SERVICE` (the always-on drop server), `RECEIVE_BOOT_COMPLETED` (restart it after a
+  reboot), and `WRITE_SECURE_SETTINGS` (granted once over ADB to keep Frame as the screensaver).
+  `android:allowBackup="false"`.
 
 ## Supported versions
 

@@ -9,6 +9,8 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent?) {
         if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
             ScreensaverGuardService.startIfEnabled(ctx)
+            // Bring the LAN photo-drop server up at boot so the frame is always reachable.
+            DropServerService.start(ctx)
         }
     }
 }

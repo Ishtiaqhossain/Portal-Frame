@@ -5,9 +5,11 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.media.ExifInterface
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -57,6 +59,12 @@ class ImageLoader(context: Context) {
     /** Shared background pool — reused for album fetches too. */
     fun executor(): ExecutorService {
         return io
+    }
+
+    /** Stop the background pool. Call from an owning Activity's onDestroy so its two
+     *  worker threads don't leak each time the screen is opened and closed. */
+    fun shutdown() {
+        io.shutdown()
     }
 
     fun load(id: String, reqW: Int, reqH: Int, zoomFill: Boolean, cb: Callback) {
@@ -114,6 +122,12 @@ class ImageLoader(context: Context) {
             }
             return decodeFile(f.absolutePath, reqW, reqH)
         }
+        // Locally-pushed photos (the "AirDrop for Portal" drop) are absolute file paths
+        // under filesDir/uploads — decode them straight off disk, honoring their EXIF
+        // orientation (camera-roll photos store rotation in EXIF; the CDN images don't).
+        if (id.startsWith("/")) {
+            return decodeFile(id, reqW, reqH, applyExif = true)
+        }
         return decodeAsset(id, reqW, reqH)
     }
 
@@ -167,13 +181,49 @@ class ImageLoader(context: Context) {
         }
     }
 
-    private fun decodeFile(path: String, reqW: Int, reqH: Int): Bitmap? {
+    private fun decodeFile(path: String, reqW: Int, reqH: Int, applyExif: Boolean = false): Bitmap? {
         val o = BitmapFactory.Options()
         o.inJustDecodeBounds = true
         BitmapFactory.decodeFile(path, o)
         o.inSampleSize = sampleSize(o.outWidth, o.outHeight, reqW, reqH)
         o.inJustDecodeBounds = false
-        return BitmapFactory.decodeFile(path, o)
+        val bmp = BitmapFactory.decodeFile(path, o) ?: return null
+        return if (applyExif) applyExifOrientation(bmp, path) else bmp
+    }
+
+    /**
+     * Rotate/flip [bmp] to match the photo's EXIF orientation. Phone camera-roll photos store
+     * their rotation in EXIF (the raw pixels are unrotated) and BitmapFactory ignores it, so
+     * without this a portrait photo pushed from a phone shows up sideways.
+     */
+    private fun applyExifOrientation(bmp: Bitmap, path: String): Bitmap {
+        val orientation = try {
+            ExifInterface(path).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL,
+            )
+        } catch (e: Exception) {
+            ExifInterface.ORIENTATION_NORMAL
+        }
+        val m = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> m.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> m.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> m.postScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> { m.postRotate(90f); m.postScale(-1f, 1f) }
+            ExifInterface.ORIENTATION_TRANSVERSE -> { m.postRotate(270f); m.postScale(-1f, 1f) }
+            else -> return bmp // normal / undefined — nothing to do
+        }
+        return try {
+            val rotated = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+            if (rotated != bmp) bmp.recycle()
+            rotated
+        } catch (e: Throwable) {
+            // Throwable, not Exception: createBitmap can throw OutOfMemoryError (an Error).
+            // Fall back to the unrotated bitmap rather than crashing the process.
+            bmp
+        }
     }
 
     @Throws(Exception::class)

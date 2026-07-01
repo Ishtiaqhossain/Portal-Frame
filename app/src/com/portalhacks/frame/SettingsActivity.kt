@@ -1,7 +1,9 @@
 package com.portalhacks.frame
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.provider.Settings
@@ -21,8 +23,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -53,7 +58,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.io.File
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * The Photos setup/settings screen, in Jetpack Compose. Reads/writes the shared
@@ -73,15 +82,44 @@ class SettingsActivity : ComponentActivity() {
     // manual entry (the album may have changed there).
     private val resumeTick = mutableIntStateOf(0)
 
+    // Bumped when a photo arrives over the LAN while this screen is open, so the
+    // "Photos added from phones" list refreshes immediately (DropServerService broadcasts).
+    private val uploadTick = mutableIntStateOf(0)
+    private var uploadReceiverRegistered = false
+    private val uploadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            uploadTick.intValue++
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         resumeTick.intValue++
         // Re-assert Frame (and restart the guard if it was killed) when opted in.
         ScreensaverGuardService.startIfEnabled(this)
+        if (!uploadReceiverRegistered) {
+            registerReceiver(uploadReceiver, IntentFilter(DropServerService.ACTION_UPLOAD))
+            uploadReceiverRegistered = true
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (uploadReceiverRegistered) {
+            unregisterReceiver(uploadReceiver)
+            uploadReceiverRegistered = false
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        loader.shutdown() // don't leak the decode thread pool each time Settings closes
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Ensure the LAN drop server is running so the QR below is live and scannable.
+        DropServerService.start(this)
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
@@ -175,6 +213,8 @@ class SettingsActivity : ComponentActivity() {
                 // One add-album screen — scan a QR or paste a link there.
                 PrimaryBtn("Add album") { gotoPhotos("scan") }
             }
+            DropCard()
+            UploadsCard()
         }
         val settingsCards: @Composable () -> Unit = {
             Card("Slideshow") {
@@ -404,6 +444,125 @@ class SettingsActivity : ComponentActivity() {
     /** "Google Photos" / "iCloud" / "Link" for the album's URL. */
     private fun providerLabel(url: String): String =
         PhotoSources.providerFor(url)?.displayName ?: "Link"
+
+    /**
+     * "Add photos from your phone": the QR + URL anyone on the Wi-Fi scans to push photos
+     * straight onto the frame (no app, no account). The QR carries the access token, so a
+     * device that never scanned it can't post.
+     */
+    @Composable
+    private fun DropCard() {
+        val ctx = LocalContext.current
+        var url by remember { mutableStateOf<String?>(null) }
+        var qr by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+        // Re-key to resumeTick so the URL/QR re-resolves when returning to the screen (e.g. after
+        // Wi-Fi connected) rather than being stuck on "Starting…" from a one-shot poll.
+        LaunchedEffect(resumeTick.intValue) {
+            DropServerService.start(ctx)
+            // Wait for the server to bind, then build the tokenized URL + QR.
+            var u = DropServerStatus.url(ctx)
+            var tries = 0
+            while (u == null && tries < 24) {
+                delay(250)
+                u = DropServerStatus.url(ctx)
+                tries++
+            }
+            val ready = u
+            url = ready
+            if (ready != null) qr = withContext(Dispatchers.Default) { QrCodes.bitmap(ready, 480) }
+        }
+        Card("Add photos from a phone") {
+            Body(
+                "On a phone connected to this Wi-Fi, scan the QR code and choose photos. " +
+                    "They'll appear on Frame right away — no app or account needed.",
+            )
+            Spacer(Modifier.height(16.dp))
+            val image = qr
+            if (image != null) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(16.dp)).background(Color.White).padding(16.dp),
+                    ) {
+                        Image(
+                            bitmap = image.asImageBitmap(),
+                            contentDescription = "QR code to add photos from a phone",
+                            modifier = Modifier.width(248.dp).aspectRatio(1f),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                // The raw link is a long, opaque-token fallback — tuck it behind a tap.
+                var showLink by remember { mutableStateOf(false) }
+                Text(
+                    if (showLink) "Hide link" else "Can't scan? Show link",
+                    color = PortalColors.Blue, fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showLink = !showLink }
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                )
+                if (showLink) {
+                    Text(
+                        url ?: "",
+                        color = PortalColors.TextMuted, fontSize = 14.sp,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp),
+                    )
+                }
+            } else {
+                Body(
+                    if (DropServerStatus.lanIp() == null) {
+                        "Connect the frame to Wi-Fi to let phones add photos."
+                    } else {
+                        "Starting…"
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * A compact entry point: a peek at recent phone-pushed photos + a button into the
+     * full-screen grid manager ([UploadsActivity]), which scales to many photos.
+     */
+    @Composable
+    private fun UploadsCard() {
+        val ctx = LocalContext.current
+        val rTick = resumeTick.intValue // refresh after returning to the screen
+        val uTick = uploadTick.intValue // refresh immediately when a photo arrives over the LAN
+        val files = remember(rTick, uTick) { LocalUploads.files(ctx) }
+        if (files.isEmpty()) return
+        Card("Photos added from phones (${files.size})") {
+            // Just a peek at the most recent — full viewing/management lives in a grid that
+            // scales to hundreds of photos, one tap away.
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(files.take(15), key = { it.path }) { f -> PreviewThumb(f) }
+            }
+            Spacer(Modifier.height(14.dp))
+            PrimaryBtn("Manage photos") {
+                startActivity(Intent(this@SettingsActivity, UploadsActivity::class.java))
+            }
+        }
+    }
+
+    /** A non-interactive thumbnail for the Settings preview strip. */
+    @Composable
+    private fun PreviewThumb(file: File) {
+        var bmp by remember(file.path) { mutableStateOf<android.graphics.Bitmap?>(null) }
+        LaunchedEffect(file.path) {
+            loader.load(file.absolutePath, 200, 200, true, ImageLoader.Callback { b -> bmp = b })
+        }
+        Box(Modifier.size(120.dp).clip(RoundedCornerShape(10.dp)).background(PortalColors.Field)) {
+            val image = bmp
+            if (image != null) {
+                Image(
+                    bitmap = image.asImageBitmap(),
+                    contentDescription = "Photo added from a phone",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+        }
+    }
 
     @Composable
     private fun Body(text: String) =
