@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -73,7 +74,10 @@ class UploadsActivity : ComponentActivity() {
         super.onResume()
         tick.intValue++
         if (!receiverRegistered) {
-            registerReceiver(uploadReceiver, IntentFilter(DropServerService.ACTION_UPLOAD))
+            ContextCompat.registerReceiver(
+                this, uploadReceiver, IntentFilter(DropServerService.ACTION_UPLOAD),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
             receiverRegistered = true
         }
     }

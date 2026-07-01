@@ -21,6 +21,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 
 /**
  * The live slideshow screensaver, hosted in Jetpack Compose.
@@ -160,7 +161,10 @@ class SlideshowComposeActivity : ComponentActivity() {
         currentAlbums = Albums.enabled(prefs)
         DropServerService.start(this)
         if (!uploadReceiverRegistered) {
-            registerReceiver(uploadReceiver, IntentFilter(DropServerService.ACTION_UPLOAD))
+            ContextCompat.registerReceiver(
+                this, uploadReceiver, IntentFilter(DropServerService.ACTION_UPLOAD),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
             uploadReceiverRegistered = true
         }
 

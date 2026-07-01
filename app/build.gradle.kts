@@ -81,6 +81,10 @@ android {
         // sideloaded (not shipped via Google Play), so Play's "target a recent API
         // level" requirement doesn't apply. Don't fail the release build on it.
         disable += "ExpiredTargetSdkVersion"
+        // WRITE_SECURE_SETTINGS is a system permission granted once over ADB on Portal
+        // (see the manifest comment + ScreensaverGuardService); the "system apps only"
+        // lint error is expected and intentional here.
+        disable += "ProtectedPermissions"
     }
 }
 
@@ -100,4 +104,5 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.core)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.exifinterface)
 }

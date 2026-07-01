@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 
@@ -43,19 +42,12 @@ class DropServerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun buildNotification(): Notification {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val mgr = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            val ch = NotificationChannel(CHANNEL, "Frame photo drop", NotificationManager.IMPORTANCE_LOW)
-            ch.setShowBadge(false)
-            mgr.createNotificationChannel(ch)
-        }
-        @Suppress("DEPRECATION")
-        val b = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL)
-        } else {
-            Notification.Builder(this)
-        }
-        return b
+        // minSdk 28, so notification channels always exist.
+        val mgr = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        val ch = NotificationChannel(CHANNEL, "Frame photo drop", NotificationManager.IMPORTANCE_LOW)
+        ch.setShowBadge(false)
+        mgr.createNotificationChannel(ch)
+        return Notification.Builder(this, CHANNEL)
             .setContentTitle("Photo sharing is on")
             .setContentText("Open Frame Settings to show the QR for adding photos from a phone")
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -73,13 +65,8 @@ class DropServerService : Service() {
 
         /** Start (or no-op if already running) the always-on drop server. */
         fun start(ctx: Context) {
-            val i = Intent(ctx, DropServerService::class.java)
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    ctx.startForegroundService(i)
-                } else {
-                    ctx.startService(i)
-                }
+                ctx.startForegroundService(Intent(ctx, DropServerService::class.java))
             } catch (e: Exception) {
                 Log.w(TAG, "could not start drop server service", e)
             }

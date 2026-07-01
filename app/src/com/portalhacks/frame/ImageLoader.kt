@@ -9,11 +9,11 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
-import android.media.ExifInterface
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.util.LruCache
+import androidx.exifinterface.media.ExifInterface
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream

@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -99,7 +100,10 @@ class SettingsActivity : ComponentActivity() {
         // Re-assert Frame (and restart the guard if it was killed) when opted in.
         ScreensaverGuardService.startIfEnabled(this)
         if (!uploadReceiverRegistered) {
-            registerReceiver(uploadReceiver, IntentFilter(DropServerService.ACTION_UPLOAD))
+            ContextCompat.registerReceiver(
+                this, uploadReceiver, IntentFilter(DropServerService.ACTION_UPLOAD),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
             uploadReceiverRegistered = true
         }
     }
@@ -711,7 +715,7 @@ class SettingsActivity : ComponentActivity() {
     @Composable
     private fun DurationSliderRow(onChanged: () -> Unit) {
         var idx by remember {
-            mutableStateOf(nearestPresetIndex(getLong(ConfigReceiver.KEY_DELAY_MS, ConfigReceiver.DEFAULT_DELAY_MS)))
+            mutableIntStateOf(nearestPresetIndex(getLong(ConfigReceiver.KEY_DELAY_MS, ConfigReceiver.DEFAULT_DELAY_MS)))
         }
         Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

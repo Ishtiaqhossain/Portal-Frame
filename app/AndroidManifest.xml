@@ -51,7 +51,6 @@
         <activity
             android:name=".UploadsActivity"
             android:exported="false"
-            android:label="Frame"
             android:theme="@style/Theme.FrameSetup"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
 
