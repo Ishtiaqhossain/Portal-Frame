@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -176,6 +177,8 @@ class SettingsActivity : ComponentActivity() {
         var tick by remember { mutableIntStateOf(0) } // bump to recompose after pref writes
         resumeTick.intValue // read so returning from the scanner re-reads albums below
         tick // read so writes that bump it recompose
+        // Only one tuning group is expanded at a time, so the "Customize" pane can't balloon.
+        var openGroup by remember { mutableStateOf<String?>(null) }
         val albums = Albums.list(prefs)
         val hasAlbum = albums.isNotEmpty()
 
@@ -216,62 +219,88 @@ class SettingsActivity : ComponentActivity() {
             DropCard()
             UploadsCard()
         }
+        // The tuning options live in one bounded "Customize" panel as collapsible rows, so the
+        // pane is a short list of headers (Playback / Look & motion / Clock & night / Extras)
+        // instead of a wall of ~16 toggles; tap a header to open just that group (one at a time).
         val settingsCards: @Composable () -> Unit = {
-            Card("Slideshow") {
-                DurationSliderRow { tick++ }
-                Divider()
-                ToggleRow("Shuffle photos", ConfigReceiver.KEY_SHUFFLE, false) { tick++ }
-                Divider()
-                CycleRow("Transition", fadeLabel(getLong(ConfigReceiver.KEY_FADE_MS, 1200))) {
-                    val next = cycle(FADE_CHOICES, getLong(ConfigReceiver.KEY_FADE_MS, 1200), 1)
-                    setLong(ConfigReceiver.KEY_FADE_MS, next); tick++
+            Column(
+                Modifier.fillMaxWidth().padding(top = 12.dp)
+                    .clip(RoundedCornerShape(20.dp)).background(PortalColors.Surface)
+                    .padding(horizontal = 24.dp, vertical = 6.dp),
+            ) {
+                CollapsibleRow(
+                    "Playback", "Time, order, transitions, captions",
+                    openGroup == "Playback", { openGroup = if (openGroup == "Playback") null else "Playback" },
+                ) {
+                    DurationSliderRow { tick++ }
+                    Divider()
+                    ToggleRow("Shuffle photos", ConfigReceiver.KEY_SHUFFLE, false) { tick++ }
+                    Divider()
+                    CycleRow("Transition", fadeLabel(getLong(ConfigReceiver.KEY_FADE_MS, 1200))) {
+                        val next = cycle(FADE_CHOICES, getLong(ConfigReceiver.KEY_FADE_MS, 1200), 1)
+                        setLong(ConfigReceiver.KEY_FADE_MS, next); tick++
+                    }
+                    Divider()
+                    ToggleRow("Pair photos to fill the screen", ConfigReceiver.KEY_PAIRS, false) { tick++ }
+                    Divider()
+                    ToggleRow(
+                        "Zoom single photos to fill",
+                        ConfigReceiver.KEY_ZOOM_FILL,
+                        false,
+                        subtitle = "Crop a single photo to fill the screen. Off: show the whole photo " +
+                            "over a blurred fill. Paired photos always fill.",
+                    ) { tick++ }
+                    Divider()
+                    ToggleRow("Photo captions", ConfigReceiver.KEY_CAPTIONS, true) { tick++ }
                 }
                 Divider()
-                ToggleRow("Pair photos to fill the screen", ConfigReceiver.KEY_PAIRS, false) { tick++ }
-                Divider()
-                ToggleRow(
-                    "Zoom single photos to fill",
-                    ConfigReceiver.KEY_ZOOM_FILL,
-                    false,
-                    subtitle = "Crop a single photo to fill the screen. Off: show the whole photo " +
-                        "over a blurred fill. Paired photos always fill.",
-                ) { tick++ }
-                Divider()
-                ToggleRow("Cinematic motion", ConfigReceiver.KEY_KEN_BURNS, true) { tick++ }
-                Divider()
-                ToggleRow("Photo captions", ConfigReceiver.KEY_CAPTIONS, true) { tick++ }
-            }
-            Card("Ambient intelligence") {
-                ToggleRow("Face-aware framing", ConfigReceiver.KEY_FACE, true) { tick++ }
-                Divider()
-                ToggleRow("Auto-enhance photos", ConfigReceiver.KEY_ENHANCE, ConfigReceiver.DEFAULT_ENHANCE) { tick++ }
-                Divider()
-                ToggleRow("Ambient color glow", ConfigReceiver.KEY_AMBIENT, true) { tick++ }
-                Divider()
-                ToggleRow(
-                    "Clock & weather", ConfigReceiver.KEY_CLOCK, true,
-                    subtitle = "Long-press the clock on the screensaver to move or resize it.",
-                ) { tick++ }
-                Divider()
-                CycleRow("Clock position & size", "Reset") {
-                    prefs.edit()
-                        .putFloat(ConfigReceiver.KEY_CLOCK_DX, ConfigReceiver.DEFAULT_CLOCK_DX)
-                        .putFloat(ConfigReceiver.KEY_CLOCK_DY, ConfigReceiver.DEFAULT_CLOCK_DY)
-                        .putFloat(ConfigReceiver.KEY_CLOCK_SCALE, ConfigReceiver.DEFAULT_CLOCK_SCALE)
-                        .apply()
-                    tick++
+                CollapsibleRow(
+                    "Look & motion", "Motion, color, enhance, framing",
+                    openGroup == "Look & motion", { openGroup = if (openGroup == "Look & motion") null else "Look & motion" },
+                ) {
+                    ToggleRow("Cinematic motion", ConfigReceiver.KEY_KEN_BURNS, true) { tick++ }
+                    Divider()
+                    ToggleRow("Face-aware framing", ConfigReceiver.KEY_FACE, true) { tick++ }
+                    Divider()
+                    ToggleRow("Auto-enhance photos", ConfigReceiver.KEY_ENHANCE, ConfigReceiver.DEFAULT_ENHANCE) { tick++ }
+                    Divider()
+                    ToggleRow("Ambient color glow", ConfigReceiver.KEY_AMBIENT, true) { tick++ }
                 }
                 Divider()
-                ToggleRow("Only clock in low light", ConfigReceiver.KEY_CLOCK_LOW_LIGHT, ConfigReceiver.DEFAULT_CLOCK_LOW_LIGHT) { tick++ }
+                CollapsibleRow(
+                    "Clock & night", "Clock, low light, night warmth",
+                    openGroup == "Clock & night", { openGroup = if (openGroup == "Clock & night") null else "Clock & night" },
+                ) {
+                    ToggleRow(
+                        "Clock & weather", ConfigReceiver.KEY_CLOCK, true,
+                        subtitle = "Long-press the clock on the screensaver to move or resize it.",
+                    ) { tick++ }
+                    Divider()
+                    CycleRow("Clock position & size", "Reset") {
+                        prefs.edit()
+                            .putFloat(ConfigReceiver.KEY_CLOCK_DX, ConfigReceiver.DEFAULT_CLOCK_DX)
+                            .putFloat(ConfigReceiver.KEY_CLOCK_DY, ConfigReceiver.DEFAULT_CLOCK_DY)
+                            .putFloat(ConfigReceiver.KEY_CLOCK_SCALE, ConfigReceiver.DEFAULT_CLOCK_SCALE)
+                            .apply()
+                        tick++
+                    }
+                    Divider()
+                    ToggleRow("Only clock in low light", ConfigReceiver.KEY_CLOCK_LOW_LIGHT, ConfigReceiver.DEFAULT_CLOCK_LOW_LIGHT) { tick++ }
+                    Divider()
+                    ToggleRow("Night warmth", ConfigReceiver.KEY_NIGHT, true) { tick++ }
+                }
                 Divider()
-                ToggleRow("Night warmth", ConfigReceiver.KEY_NIGHT, true) { tick++ }
-                Divider()
-                ToggleRow("On This Day memories", ConfigReceiver.KEY_ON_THIS_DAY, true) { tick++ }
-                Divider()
-                ToggleRow(
-                    "Sticky notes & fortunes", ConfigReceiver.KEY_NOTES, ConfigReceiver.DEFAULT_NOTES,
-                    subtitle = "Show a post-it note on the frame, or a fetched wisdom line when no note is set.",
-                ) { tick++ }
+                CollapsibleRow(
+                    "Extras", "Memories, sticky notes",
+                    openGroup == "Extras", { openGroup = if (openGroup == "Extras") null else "Extras" },
+                ) {
+                    ToggleRow("On This Day memories", ConfigReceiver.KEY_ON_THIS_DAY, true) { tick++ }
+                    Divider()
+                    ToggleRow(
+                        "Sticky notes & fortunes", ConfigReceiver.KEY_NOTES, ConfigReceiver.DEFAULT_NOTES,
+                        subtitle = "Show a post-it note on the frame, or a fetched wisdom line when no note is set.",
+                    ) { tick++ }
+                }
             }
         }
 
@@ -279,12 +308,14 @@ class SettingsActivity : ComponentActivity() {
             Modifier.fillMaxSize().background(PortalColors.Bg),
             contentAlignment = Alignment.TopCenter,
         ) {
-            // Two columns only when there's room (Portal Go/+ landscape); one column
-            // on the original Portal's portrait screen and the small Portal Mini.
-            val twoCol = maxWidth >= 880.dp
+            // Two columns only when there's real room (Portal Go/+ landscape); one column on
+            // the original Portal's portrait screen and the small Portal Mini. The columns
+            // aren't equal weight: setup (QR, album rows, thumbnails) is denser than the
+            // collapsed tuning pane, so it gets the wider ~60% share.
+            val twoCol = maxWidth >= 1000.dp
             val sidePad = if (maxWidth < 560.dp) 24.dp else 40.dp
             Column(
-                Modifier.widthIn(max = if (twoCol) 1100.dp else 620.dp).fillMaxWidth()
+                Modifier.widthIn(max = if (twoCol) 1160.dp else 620.dp).fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = sidePad, vertical = 72.dp),
             ) {
@@ -292,16 +323,23 @@ class SettingsActivity : ComponentActivity() {
                     if (hasAlbum) "Your photos" else "Show your photos",
                     color = PortalColors.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold,
                 )
-                Spacer(Modifier.height(8.dp))
 
                 if (twoCol) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                        Column(Modifier.weight(1f)) { sourceCards() }
+                        Column(Modifier.weight(3f)) {
+                            ColumnHeader("Set up")
+                            sourceCards()
+                        }
                         Spacer(Modifier.width(24.dp))
-                        Column(Modifier.weight(1f)) { settingsCards() }
+                        Column(Modifier.weight(2f)) {
+                            ColumnHeader("Customize")
+                            settingsCards()
+                        }
                     }
                 } else {
+                    ColumnHeader("Set up")
                     sourceCards()
+                    ColumnHeader("Customize")
                     settingsCards()
                 }
 
@@ -325,6 +363,49 @@ class SettingsActivity : ComponentActivity() {
             )
             Spacer(Modifier.height(8.dp))
             content()
+        }
+    }
+
+    /** A heading above a layout column, e.g. "Set up" / "Customize", sized for tabletop distance. */
+    @Composable
+    private fun ColumnHeader(text: String) {
+        Text(
+            text, color = PortalColors.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 20.dp, bottom = 2.dp),
+        )
+    }
+
+    /**
+     * A collapsible tuning section rendered as a row inside the "Customize" panel: a 64dp header
+     * (title + one-line summary + chevron) that expands on tap to reveal its controls. Expansion
+     * is controlled by the caller so only one group is open at a time.
+     */
+    @Composable
+    private fun CollapsibleRow(
+        title: String,
+        summary: String,
+        expanded: Boolean,
+        onToggle: () -> Unit,
+        content: @Composable () -> Unit,
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 64.dp)
+                    .clickable(onClickLabel = if (expanded) "Collapse $title" else "Expand $title") { onToggle() }
+                    .padding(vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, color = PortalColors.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                    if (!expanded) {
+                        Text(summary, color = PortalColors.TextMuted, fontSize = 15.sp)
+                    }
+                }
+                Text(if (expanded) "▾" else "▸", color = PortalColors.TextMuted, fontSize = 22.sp)
+            }
+            if (expanded) {
+                Column(Modifier.padding(bottom = 12.dp)) { content() }
+            }
         }
     }
 
@@ -411,7 +492,7 @@ class SettingsActivity : ComponentActivity() {
                 Spacer(Modifier.height(2.dp))
                 Text(
                     providerLabel(url) + " · " + url,
-                    color = PortalColors.TextMuted, fontSize = 13.sp,
+                    color = PortalColors.TextMuted, fontSize = 14.sp,
                     maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -596,7 +677,7 @@ class SettingsActivity : ComponentActivity() {
             Column(Modifier.weight(1f)) {
                 Text(label, color = PortalColors.Text, fontSize = 18.sp)
                 if (subtitle != null) {
-                    Text(subtitle, color = PortalColors.Text.copy(alpha = 0.6f), fontSize = 13.sp)
+                    Text(subtitle, color = PortalColors.Text.copy(alpha = 0.6f), fontSize = 14.sp)
                 }
             }
             Switch(
@@ -661,9 +742,9 @@ class SettingsActivity : ComponentActivity() {
             Row(Modifier.fillMaxWidth()) {
                 Text(
                     fmtDelay(DELAY_PRESETS.first()),
-                    color = PortalColors.TextMuted, fontSize = 12.sp, modifier = Modifier.weight(1f),
+                    color = PortalColors.TextMuted, fontSize = 14.sp, modifier = Modifier.weight(1f),
                 )
-                Text(fmtDelay(DELAY_PRESETS.last()), color = PortalColors.TextMuted, fontSize = 12.sp)
+                Text(fmtDelay(DELAY_PRESETS.last()), color = PortalColors.TextMuted, fontSize = 14.sp)
             }
         }
     }
