@@ -2,6 +2,8 @@ We have a Meta Portal in our kitchen and the thing I actually used it for was th
 
 So I spent a few weekends building a replacement. It's called Frame. You give it one or more shared album links — Google Photos or Apple Photos — and it runs as the screensaver, same as before. No Meta account, no lock-in. It even ships with a set of photos built in, so it does something the moment you install it, before you've added anything.
 
+More recently I added a second way to get photos on there that needs no album at all: scan a QR on the frame with your phone, and it opens a little web page where you pick photos from your camera roll and they show up on the screen a second later. No app to install, nothing goes to a cloud — the photos hop straight from your phone to the Portal over your home Wi‑Fi. Works from an iPhone or Android, and there's a grid on the frame to see and delete what you've added.
+
 While I was at it I added some stuff the original didn't have: pull from several albums at once and pause or drop any one of them, optional auto-enhancement, a side-by-side mode for portrait shots so they're not stranded in the middle of a landscape screen, face-aware cropping so nobody loses their head in the pan, a clock and weather overlay, and night dimming so it's not glowing at full brightness at 3am.
 
 It's open source (MIT), written in Kotlin, no third-party dependencies, no backend. If you've got a Portal collecting dust since the update, the code and setup steps are here:

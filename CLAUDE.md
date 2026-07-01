@@ -6,8 +6,9 @@ Guidance for AI assistants (and humans) working in this repo.
 
 **Frame** (repo: PortalFrame, app id `com.portalhacks.frame`) — an Android slideshow /
 screensaver for the **Meta Portal Go** (Android 10 / API 29) that shows Google Photos and iCloud
-shared albums. App is 100% Kotlin — Jetpack Compose for the settings screen, Android Views for the
-slideshow/scanner. There is no backend.
+shared albums, plus photos pushed from a phone over Wi‑Fi (the "AirDrop for Portal" drop). App is
+100% Kotlin — Jetpack Compose for the settings screens, Android Views for the slideshow/scanner.
+No cloud backend; the only server is an on-device, LAN-only photo-drop HTTP server (see Architecture).
 
 ## Build & run
 
@@ -43,8 +44,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
   Activity owns the album fetch/cache/refresh + night-dimming logic. Features: crossfade,
   clock/weather overlay, captions, Ken Burns, face-aware framing, ambient color, auto-enhance,
   night dimming, smart shuffle, On This Day, portrait pairing.
-- **`SettingsActivity`** (Kotlin/Compose) — the home-icon ("Frame") setup/settings screen. Hands
-  off to `PhotosActivity` for the camera scanner / manual link entry.
+- **`SettingsActivity`** (Kotlin/Compose) — the home-icon ("Frame") setup/settings screen: a
+  two-column "Set up" / "Customize" layout (tuning grouped into collapsible sections). Hands off to
+  `PhotosActivity` (scanner / manual link entry) and `UploadsActivity` (phone-pushed photos grid),
+  and shows the phone-drop QR.
 - **`PhotosActivity`** (Kotlin, Android Views) — camera QR scanner + manual entry (ZXing, vendored jar).
 - **`PhotoProvider` / `PhotoSources`** — provider abstraction + registry. `PhotoSources.matches(url)`
   / `fetch(url)` route a link to the right provider and return a shared `Album` (title + slides).
@@ -52,9 +55,22 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - **`GooglePhotosSource`** — provider that scrapes the public shared-album page (the Library API is gone).
 - **`ApplePhotosSource`** — provider for public iCloud Shared Albums via Apple's `sharedstreams`
   web API (`webstream` → `webasseturls`, handling the 330 partition redirect).
-- **`ImageLoader`** — background decode + disk/memory image cache.
+- **`ImageLoader`** — background decode + disk/memory image cache. Also decodes locally-pushed
+  photos (absolute `filesDir/uploads` paths) and applies their EXIF orientation (androidx).
 - **`AlbumCache`** — shared persistence of the fetched photo list + title in `SharedPreferences`,
   used by both the slideshow and the settings preview.
+- **Add photos from a phone ("AirDrop for Portal")** — a phone on the LAN scans an on-screen QR,
+  its browser posts photos to the frame, and they persist in the slideshow rotation:
+  - **`DropServerService`** — foreground service owning the LAN server (started from the slideshow,
+    Settings, and on boot); broadcasts `ACTION_UPLOAD` (package-scoped) on each upload.
+  - **`LocalDropServer`** — embedded HTTP server (raw `ServerSocket` + hand-rolled multipart, no HTTP
+    lib): serves the mobile upload page (`GET /`) and accepts `POST /upload`. **Plaintext + LAN-only
+    by design**, token-gated, image-validated (magic bytes), size/connection-capped.
+  - **`LocalUploads`** — persistent `filesDir/uploads` store (the "keep") with count/byte caps.
+  - **`DropAuth`** (per-install token carried in the QR), **`DropServerStatus`** (bound port + LAN
+    URL), **`QrCodes`** (ZXing QR encode).
+  - **`UploadsActivity`** (Compose) — full-screen `LazyVerticalGrid` to view/delete pushed photos;
+    reached from `SettingsActivity`'s "Manage photos".
 - **`ConfigReceiver`** — `SharedPreferences` keys + the exported ADB config receiver.
 - **`Ui` (Views) / `Theme.kt` (Compose)** — the shared Portal dark palette + Inter typography.
 
@@ -62,8 +78,14 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 - All Kotlin — no Java. Match surrounding style: idiomatic Kotlin + Android Views for the
   view-based pieces, idiomatic Compose for new UI. Keep the Portal palette (`Ui` / `PortalColors`).
-- **Networking is HTTPS-only** and size-capped; album fetch and image download reject non-HTTPS
-  URLs (`network_security_config.xml`). Don't loosen this. See `SECURITY.md`.
+- **Outbound networking is HTTPS-only** and size-capped; album fetch and image download reject
+  non-HTTPS URLs (`network_security_config.xml`). Don't loosen this. The inbound photo-drop server
+  (`LocalDropServer`) is the deliberate exception: plaintext + LAN-only + token-gated **by design**
+  (it's a server socket, which the network-security config doesn't govern). See `SECURITY.md`.
+- **Static analysis runs in CI** (`lintDebug` + `detekt` + `ktlint` on every push/PR): new findings
+  fail, existing ones are grandfathered by baselines (`app/detekt-baseline.xml`,
+  `app/config/ktlint/baseline.xml`; detekt config at `config/detekt/detekt.yml`). Run
+  `./gradlew lintDebug detekt ktlintCheck` and `./gradlew ktlintFormat` before pushing.
 - The scraper regexes in `GooglePhotosSource` are intentionally tight and anchored to
   `lh3.googleusercontent.com`; it's unofficial and must fail closed (fall back to bundled samples).
 - `ConfigReceiver` is exported (for ADB) but validates the album URL — keep that validation.

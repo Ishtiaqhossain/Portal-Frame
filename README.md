@@ -1,9 +1,9 @@
 # Frame
 
 An open-source slideshow **screensaver for the Meta Portal Go** (Android 10 / API 29) that shows
-your **Google Photos** or **iCloud** shared albums. Set it up on-device by scanning the album's QR code (or
-pasting the link), and it plays your photos whenever the Portal is idle — with a clock, captions,
-cinematic motion, and ambient color.
+your **Google Photos** or **iCloud** shared albums — or photos you **push straight from your phone**
+over Wi-Fi. Set it up on-device by scanning an album's QR code (or pasting the link), and it plays
+your photos whenever the Portal is idle — with a clock, captions, cinematic motion, and ambient color.
 
 > Repo name: **PortalFrame** (`com.portalhacks.frame`). The app displays as **Frame**.
 
@@ -35,6 +35,9 @@ as the screensaver).
 ## Features
 
 - Plays a **Google Photos or iCloud** shared album; new photos appear automatically.
+- **Add photos from a phone** — scan Frame's on-screen QR with any phone on the same Wi‑Fi, pick
+  photos from your camera roll in the browser, and they appear on the frame instantly and stay in
+  the rotation. No app, no account, no cloud — the photos go straight from your phone to the Portal.
 - On-device setup: **QR scan** or paste the link — no computer needed after install.
 - Clock & weather, photo date captions, shuffle, adjustable timing and transitions.
 - Side-by-side portraits, cinematic pan/zoom, auto-enhance, ambient color, night dimming,

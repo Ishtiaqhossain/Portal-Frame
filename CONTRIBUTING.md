@@ -12,6 +12,17 @@ The app is Android (Java + Kotlin/Jetpack Compose) and builds with Gradle:
 # -> app/build/outputs/apk/debug/app-debug.apk
 ```
 
+CI runs static analysis on every push/PR — mirror it locally before you push:
+
+```bash
+./gradlew lintDebug detekt ktlintCheck   # Android Lint + detekt + ktlint
+./gradlew ktlintFormat                   # auto-fix formatting on your changes
+```
+
+New findings fail the build; pre-existing ones are grandfathered by baselines
+(`app/detekt-baseline.xml`, `app/config/ktlint/baseline.xml`) — only regenerate those when you
+mean to accept new debt.
+
 Requirements:
 - **JDK 17–21** (AGP needs a JDK in this range; a newer/GraalVM JDK can fail the build's
   `JdkImageTransform`). Point Gradle at one with `JAVA_HOME` or `org.gradle.java.home` if your
@@ -48,8 +59,16 @@ Then either launch the **Frame** app icon (setup/settings) or set it as the scre
   - `PhotosActivity` (Android Views) — camera QR scanner + manual link entry.
   - `PhotoProvider` / `PhotoSources` — provider abstraction + registry (route a link → `Album`).
   - `GooglePhotosSource`, `ApplePhotosSource` — the providers.
-  - `ImageLoader` / `AlbumCache` — decoding/caching and the persisted photo cache.
+  - `ImageLoader` / `AlbumCache` — decoding/caching and the persisted photo cache. `ImageLoader`
+    also decodes locally-pushed photos and honours their EXIF orientation.
+  - **Add photos from a phone** ("AirDrop for Portal"): `DropServerService` runs a foreground
+    LAN HTTP server (`LocalDropServer`, raw `ServerSocket` + hand-rolled multipart) that a phone's
+    browser posts photos to; `LocalUploads` persists them under `filesDir/uploads`; `DropAuth`
+    (token), `DropServerStatus` (bound port/URL) and `QrCodes` (ZXing encode) back the on-screen QR;
+    `UploadsActivity` is the on-device grid to view/delete them. Plaintext + LAN-only + token-gated
+    by design — see `SECURITY.md`.
 - `app/res/`, `app/assets/` — resources, fonts, sample slides.
+- `config/detekt/`, `app/*-baseline.xml`, `app/config/ktlint/` — static-analysis config/baselines.
 - `tools/` — pure-stdlib Python helpers that generate the sample slides and launcher icon.
 
 ## Code style

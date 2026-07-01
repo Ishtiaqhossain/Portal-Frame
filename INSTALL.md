@@ -1,11 +1,11 @@
 # Frame — Install & User Guide
 
-Turn your **Meta Portal Go** into a digital photo frame that plays your **Google Photos** or
-**iCloud** shared albums whenever it's idle. You install a ready-made `Frame-*.apk` — you don't
-need to build anything.
+Turn your **Meta Portal Go** into a digital photo frame. It can play your **Google Photos** or
+**iCloud** shared albums, and/or photos you **push straight from your phone** over Wi‑Fi — whenever
+it's idle. You install a ready-made `Frame-*.apk` — you don't need to build anything.
 
-> New here? You'll do three things once: **install** the app, **add your album**, and
-> **turn it on as the screensaver**. After that it just runs.
+> New here? You'll do three things once: **install** the app, **add your photos** (a shared album,
+> a phone push, or both), and **turn it on as the screensaver**. After that it just runs.
 
 ---
 
@@ -96,6 +96,23 @@ Then, on the Portal, tap **Add album**. That one screen lets you either:
 Once set, the Album card shows the album's **title and a preview of its first photo**, so you can
 confirm it's the right one.
 
+### Or — add photos straight from your phone (no album needed)
+You can also push photos onto Frame from **any phone on the same Wi‑Fi**, without a shared album —
+handy for adding a few photos on the spot:
+
+1. On the Portal's setup screen, find **Add photos from a phone**. It shows a **QR code**.
+2. On your phone, **scan that QR** with the camera app. It opens a simple web page in your browser —
+   there's **no app to install**.
+3. Tap **Choose photos**, pick photos from your camera roll, and tap **Add to Frame**.
+
+They appear on the frame **right away** and stay in the rotation, alongside any albums. Because it's
+just your phone's browser, it works from an **iPhone or Android**, and **nothing goes to any cloud** —
+the photos travel directly from your phone to the Portal over your home Wi‑Fi. Only a phone that
+scanned the on-screen QR can add photos.
+
+> **Manage them:** the **Photos from phones** card on the setup screen shows how many you've added;
+> tap **Manage photos** to see them all in a grid and **delete** any (or **Remove all**).
+
 ### Step 2 — Turn Frame on as the screensaver
 1. On the setup screen, tap **Use as screensaver**.
 2. In the list that opens, choose **Frame**.
@@ -128,9 +145,15 @@ Frame falls back to the normal system picker and the launcher may still reset it
   - **Single tap** — dismiss (wake the Portal)
   - **Long‑press** — open the Frame setup screen
 - **Add photos anytime.** New photos you add to the shared album (in Google Photos or iCloud) show
-  up on the Portal automatically (it re-checks each time it goes idle).
+  up on the Portal automatically (it re-checks each time it goes idle). Or **push a photo from your
+  phone** on the spot — scan the QR under **Add photos from a phone** and pick from your camera roll;
+  it appears on the frame right away.
 
 ### Settings you can change (in the Frame app)
+The setup screen has two sides: **Set up** (screensaver, albums, add photos from a phone) and
+**Customize** — the playback/look options, grouped into collapsible sections (**Playback**, **Look
+& motion**, **Clock & night**, **Extras**). Tap a group to open it. The options include:
+
 - **Seconds per photo** — how long each photo stays (4s up to 1 minute).
 - **Shuffle photos** — random order on/off.
 - **Transition** — crossfade speed (Slow / Normal / Fast).
@@ -168,6 +191,10 @@ Frame falls back to the normal system picker and the launcher may still reset it
 - **Frame keeps reverting to the Portal's own screensaver (e.g. after rotating the screen).** The
   launcher reclaims the screensaver slot. Grant the one-time permission in
   [Make it stick on Portal / Portal+](#make-it-stick-on-portal--portal-optional-recommended) above.
+- **Adding photos from a phone doesn't work.** Make sure the **phone and the Portal are on the same
+  Wi‑Fi** (and the network allows devices to talk to each other — some guest/public networks block
+  this). Re-scan the QR from **Add photos from a phone** each session, and add photos in the browser
+  page it opens (don't bookmark it — the link is single-use and only valid while that QR is shown).
 - **Videos are skipped.** Frame shows photos only; videos in the album are ignored.
 - **Only sample photos show.** That means no album is set (or it couldn't be reached) — open Frame
   and add your album again.
@@ -175,5 +202,6 @@ Frame falls back to the normal system picker and the launcher may still reset it
 ---
 
 *Frame is open‑source software, provided as‑is. It reads only the public shared album you point it
-at and shows your photos on the Portal — nothing is uploaded anywhere. See the project README and
-SECURITY.md for technical details.*
+at, plus any photos you push to it directly from a phone on your own Wi‑Fi, and shows them on the
+Portal — nothing is uploaded to any cloud or outside server. See the project README and SECURITY.md
+for technical details.*
