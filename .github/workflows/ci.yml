@@ -1,8 +1,9 @@
 name: CI
 
-# Build the debug APK and run JVM unit tests on every push and pull request,
-# so a broken build or a failing test is caught before it lands. The signed
-# release build lives in release.yml (tag pushes only) and needs no secrets here.
+# Build the debug APK, run JVM unit tests, and run static analysis (Android Lint +
+# detekt + ktlint) on every push and pull request, so a broken build, a failing test,
+# or a new lint/style regression is caught before it lands. The signed release build
+# lives in release.yml (tag pushes only) and needs no secrets here.
 
 on:
   push:
@@ -40,6 +41,19 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Static analysis (Android Lint, detekt, ktlint)
+        run: ./gradlew lintDebug detekt ktlintCheck --no-daemon --stacktrace
+
+      - name: Upload lint/analysis reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-analysis-reports
+          path: |
+            app/build/reports/lint-results-debug.html
+            app/build/reports/detekt/
+          if-no-files-found: ignore
 
       - name: Upload unit test report
         if: ${{ !cancelled() }}

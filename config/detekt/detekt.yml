@@ -1,0 +1,14 @@
+# Overrides on top of detekt's default rules (buildUponDefaultConfig = true).
+# We silence rules that are pure noise for a Jetpack Compose / Android UI app so
+# the remaining findings are real code smells worth acting on.
+style:
+  MagicNumber:
+    # UI code is full of legitimate numeric literals (dp, sizes, colors, timeouts).
+    active: false
+  ReturnCount:
+    # Guard-clause early returns are idiomatic Kotlin here.
+    active: false
+naming:
+  FunctionNaming:
+    # @Composable functions are intentionally PascalCase.
+    ignoreAnnotated: ['Composable']

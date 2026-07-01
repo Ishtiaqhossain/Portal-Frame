@@ -5,6 +5,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.detekt)
+    alias(libs.plugins.ktlint)
 }
 
 // Release signing inputs, read from env vars (CI) or a local, git-ignored
@@ -92,6 +94,18 @@ kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
+}
+
+// Kotlin static analysis. buildUponDefaultConfig uses detekt's default rules; the baseline
+// grandfathers pre-existing findings so only new issues fail the build (regenerate with
+// `./gradlew detektBaseline`).
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    baseline = file("detekt-baseline.xml")
+    parallel = true
+    // This module uses a flat "src" layout (not src/main/java), so point detekt at it.
+    source.setFrom(files("src"))
 }
 
 dependencies {

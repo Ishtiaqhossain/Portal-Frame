@@ -1,0 +1,111 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:ImageLoader.kt$ImageLoader$reqW &lt;= 0 || reqH &lt;= 0 || w &lt;= 0 || h &lt;= 0</ID>
+    <ID>ComplexCondition:LocalDropServer.kt$LocalDropServer$u(0) == 0x47 &amp;&amp; u(1) == 0x49 &amp;&amp; u(2) == 0x46 &amp;&amp; u(3) == 0x38</ID>
+    <ID>ComplexCondition:LocalDropServer.kt$LocalDropServer$u(0) == 0x52 &amp;&amp; u(1) == 0x49 &amp;&amp; u(2) == 0x46 &amp;&amp; u(3) == 0x46 &amp;&amp; u(8) == 0x57 &amp;&amp; u(9) == 0x45 &amp;&amp; u(10) == 0x42 &amp;&amp; u(11) == 0x50</ID>
+    <ID>ComplexCondition:LocalDropServer.kt$LocalDropServer$u(0) == 0x89 &amp;&amp; u(1) == 0x50 &amp;&amp; u(2) == 0x4E &amp;&amp; u(3) == 0x47</ID>
+    <ID>ComplexCondition:LocalDropServer.kt$LocalDropServer$u(4) == 0x66 &amp;&amp; u(5) == 0x74 &amp;&amp; u(6) == 0x79 &amp;&amp; u(7) == 0x70</ID>
+    <ID>ComplexCondition:SlideshowController.kt$SlideshowController$!pairs || items.size &lt; 2 || start &lt; 0 || start &gt;= items.size</ID>
+    <ID>ComplexCondition:SlideshowController.kt$SlideshowController$lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp")</ID>
+    <ID>ComplexCondition:SlideshowController.kt$SlideshowController.&lt;no name provided&gt;$!moved &amp;&amp; !pinching &amp;&amp; abs(e.x - downX) &lt; TAP_SLOP &amp;&amp; abs(e.y - downY) &lt; TAP_SLOP &amp;&amp; dt &lt; TAP_TIMEOUT_MS</ID>
+    <ID>ComplexCondition:SlideshowController.kt$SlideshowController.&lt;no name provided&gt;$abs(dx) &lt; TAP_SLOP &amp;&amp; abs(dy) &lt; TAP_SLOP &amp;&amp; dt &lt; TAP_TIMEOUT_MS &amp;&amp; onDismiss != null</ID>
+    <ID>CyclomaticComplexMethod:ApplePhotosSource.kt$ApplePhotosSource$private fun parseAlbum(base: String, ws: JSONObject): Album</ID>
+    <ID>CyclomaticComplexMethod:ConfigReceiver.kt$ConfigReceiver$override fun onReceive(ctx: Context, intent: Intent?)</ID>
+    <ID>CyclomaticComplexMethod:FaceFocus.kt$FaceFocus$@JvmStatic fun find(src: Bitmap?): FloatArray?</ID>
+    <ID>CyclomaticComplexMethod:GooglePhotosSource.kt$GooglePhotosSource$private fun parse(html: String): List&lt;Slide&gt;</ID>
+    <ID>CyclomaticComplexMethod:LocalDropServer.kt$LocalDropServer$private fun handleUpload(input: BufferedInputStream, headers: Map&lt;String, String&gt;, out: OutputStream)</ID>
+    <ID>CyclomaticComplexMethod:LocalDropServer.kt$LocalDropServer$private fun imageExt(data: ByteArray, filename: String, contentType: String): String?</ID>
+    <ID>CyclomaticComplexMethod:LocalDropServer.kt$LocalDropServer$private fun readHead(input: BufferedInputStream): ByteArray?</ID>
+    <ID>CyclomaticComplexMethod:PhotosActivity.kt$PhotosActivity$private fun openCamera(holder: SurfaceHolder)</ID>
+    <ID>CyclomaticComplexMethod:SettingsActivity.kt$SettingsActivity$@Composable private fun SettingsScreen()</ID>
+    <ID>CyclomaticComplexMethod:Weather.kt$Weather$private fun emojiFor(c: Int, day: Boolean): String</ID>
+    <ID>EmptyFunctionBlock:PhotosActivity.kt$PhotosActivity.&lt;no name provided&gt;${ }</ID>
+    <ID>EmptyFunctionBlock:PhotosActivity.kt$PhotosActivity.&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:SlideshowComposeActivity.kt$SlideshowComposeActivity.&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:SlideshowController.kt$SlideshowController.StickyNoteBg${}</ID>
+    <ID>FunctionParameterNaming:ImageLoader.kt$ImageLoader.Companion$`in`: IntArray</ID>
+    <ID>ImplicitDefaultLocale:DropAuth.kt$DropAuth$String.format("%02x", b.toInt() and 0xff)</ID>
+    <ID>ImplicitDefaultLocale:ImageLoader.kt$ImageLoader.Companion$String.format("%032x", BigInteger(1, d))</ID>
+    <ID>LargeClass:SlideshowController.kt$SlideshowController</ID>
+    <ID>LongMethod:ConfigReceiver.kt$ConfigReceiver$override fun onReceive(ctx: Context, intent: Intent?)</ID>
+    <ID>LongMethod:LocalDropServer.kt$LocalDropServer$private fun handleUpload(input: BufferedInputStream, headers: Map&lt;String, String&gt;, out: OutputStream)</ID>
+    <ID>LongMethod:PhotosActivity.kt$PhotosActivity$private fun openCamera(holder: SurfaceHolder)</ID>
+    <ID>LongMethod:PhotosActivity.kt$PhotosActivity$private fun showScanner()</ID>
+    <ID>LongMethod:SettingsActivity.kt$SettingsActivity$@Composable private fun AlbumRow(url: String, onRemove: () -&gt; Unit)</ID>
+    <ID>LongMethod:SettingsActivity.kt$SettingsActivity$@Composable private fun DropCard()</ID>
+    <ID>LongMethod:SettingsActivity.kt$SettingsActivity$@Composable private fun SettingsScreen()</ID>
+    <ID>LongMethod:SlideshowController.kt$SlideshowController.&lt;no name provided&gt;$override fun onTouch(v: View, e: MotionEvent): Boolean</ID>
+    <ID>LongMethod:UploadsActivity.kt$UploadsActivity$@Composable private fun UploadsScreen()</ID>
+    <ID>LongParameterList:ImageLoader.kt$ImageLoader$( id1: String, id2: String, reqW: Int, reqH: Int, stackVertical: Boolean, cb: Callback )</ID>
+    <ID>LongParameterList:ImageLoader.kt$ImageLoader.Companion$( c: Canvas, p: Paint, src: Bitmap?, left: Int, top: Int, w: Int, h: Int, zoomFill: Boolean )</ID>
+    <ID>LongParameterList:LocalDropServer.kt$LocalDropServer$(out: OutputStream, status: Int, added: Int, rejected: Int, reason: String, message: String)</ID>
+    <ID>LongParameterList:PhotosActivity.kt$PhotosActivity$( data: ByteArray, w: Int, h: Int, left: Int, top: Int, rw: Int, rh: Int, mirror: Boolean, )</ID>
+    <ID>LoopWithTooManyJumpStatements:AlbumCache.kt$AlbumCache$for</ID>
+    <ID>LoopWithTooManyJumpStatements:ApplePhotosSource.kt$ApplePhotosSource$for</ID>
+    <ID>LoopWithTooManyJumpStatements:ApplePhotosSource.kt$ApplePhotosSource$while</ID>
+    <ID>LoopWithTooManyJumpStatements:GooglePhotosSource.kt$GooglePhotosSource$for</ID>
+    <ID>LoopWithTooManyJumpStatements:LocalDropServer.kt$LocalDropServer$while</ID>
+    <ID>LoopWithTooManyJumpStatements:LocalDropServer.kt$MultipartParser$while</ID>
+    <ID>LoopWithTooManyJumpStatements:SlideshowController.kt$SlideshowController$while</ID>
+    <ID>MaxLineLength:LocalDropServer.kt$LocalDropServer$if (unsupported == 1) "One file wasn't a supported photo." else "$unsupported files weren't supported photos."</ID>
+    <ID>MaxLineLength:LocalDropServer.kt$LocalDropServer$private</ID>
+    <ID>MaxLineLength:SettingsActivity.kt$SettingsActivity$ToggleRow("Auto-enhance photos", ConfigReceiver.KEY_ENHANCE, ConfigReceiver.DEFAULT_ENHANCE) { tick++ }</ID>
+    <ID>MaxLineLength:SettingsActivity.kt$SettingsActivity$ToggleRow("Only clock in low light", ConfigReceiver.KEY_CLOCK_LOW_LIGHT, ConfigReceiver.DEFAULT_CLOCK_LOW_LIGHT) { tick++ }</ID>
+    <ID>MaxLineLength:SettingsActivity.kt$SettingsActivity$openGroup == "Clock &amp; night"</ID>
+    <ID>MaxLineLength:SettingsActivity.kt$SettingsActivity$openGroup == "Look &amp; motion"</ID>
+    <ID>NestedBlockDepth:QrCodes.kt$QrCodes$fun bitmap(text: String, size: Int): Bitmap?</ID>
+    <ID>NestedBlockDepth:SlideshowController.kt$SlideshowController$private fun assetItems(): MutableList&lt;Slide&gt;</ID>
+    <ID>SwallowedException:AlbumCache.kt$AlbumCache$e: JSONException</ID>
+    <ID>SwallowedException:Albums.kt$Albums$e: JSONException</ID>
+    <ID>SwallowedException:AmbientColor.kt$AmbientColor$t: Throwable</ID>
+    <ID>SwallowedException:ApplePhotosSource.kt$ApplePhotosSource$e: Exception</ID>
+    <ID>SwallowedException:DropServerStatus.kt$DropServerStatus$e: Exception</ID>
+    <ID>SwallowedException:ImageLoader.kt$ImageLoader$e: Exception</ID>
+    <ID>SwallowedException:ImageLoader.kt$ImageLoader$e: Throwable</ID>
+    <ID>SwallowedException:ImageLoader.kt$ImageLoader.Companion$e: Exception</ID>
+    <ID>SwallowedException:LocalDropServer.kt$LocalDropServer$e: Exception</ID>
+    <ID>SwallowedException:LocalDropServer.kt$LocalDropServer$e: IOException</ID>
+    <ID>SwallowedException:PhotoEnhance.kt$PhotoEnhance$t: Throwable</ID>
+    <ID>SwallowedException:PhotosActivity.kt$PhotosActivity$e: Exception</ID>
+    <ID>SwallowedException:PhotosActivity.kt$PhotosActivity$notFound: Exception</ID>
+    <ID>SwallowedException:QrCodes.kt$QrCodes$e: Exception</ID>
+    <ID>SwallowedException:Theme.kt$PortalFont$t: Throwable</ID>
+    <ID>SwallowedException:Ui.kt$Ui$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:AmbientColor.kt$AmbientColor$t: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ApplePhotosSource.kt$ApplePhotosSource$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:DropServerService.kt$DropServerService.Companion$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:DropServerStatus.kt$DropServerStatus$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:FaceFocus.kt$FaceFocus$t: Throwable</ID>
+    <ID>TooGenericExceptionCaught:Fortune.kt$Fortune$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:FrameDreamService.kt$FrameDreamService$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ImageLoader.kt$ImageLoader$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ImageLoader.kt$ImageLoader$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ImageLoader.kt$ImageLoader.Companion$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:LocalDropServer.kt$LocalDropServer$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:LocalUploads.kt$LocalUploads$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PhotoEnhance.kt$PhotoEnhance$t: Throwable</ID>
+    <ID>TooGenericExceptionCaught:PhotosActivity.kt$PhotosActivity$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PhotosActivity.kt$PhotosActivity$notFound: Exception</ID>
+    <ID>TooGenericExceptionCaught:QrCodes.kt$QrCodes$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ScreensaverGuard.kt$Screensaver$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SettingsActivity.kt$SettingsActivity$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SlideshowComposeActivity.kt$SlideshowComposeActivity$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:Theme.kt$PortalFont$t: Throwable</ID>
+    <ID>TooGenericExceptionCaught:Ui.kt$Ui$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:Weather.kt$Weather$e: Exception</ID>
+    <ID>TooManyFunctions:Albums.kt$Albums</ID>
+    <ID>TooManyFunctions:ImageLoader.kt$ImageLoader</ID>
+    <ID>TooManyFunctions:LocalDropServer.kt$LocalDropServer</ID>
+    <ID>TooManyFunctions:PhotosActivity.kt$PhotosActivity : Activity</ID>
+    <ID>TooManyFunctions:SettingsActivity.kt$SettingsActivity : ComponentActivity</ID>
+    <ID>TooManyFunctions:SlideshowController.kt$SlideshowController</ID>
+    <ID>TooManyFunctions:Ui.kt$Ui</ID>
+    <ID>UnusedParameter:LocalDropServer.kt$LocalDropServer$contentType: String</ID>
+    <ID>UnusedParameter:LocalDropServer.kt$LocalDropServer$filename: String</ID>
+    <ID>UnusedPrivateProperty:ApplePhotosSource.kt$ApplePhotosSource$attempt</ID>
+    <ID>VariableNaming:ImageLoader.kt$ImageLoader$val `in` = BufferedInputStream(c.inputStream)</ID>
+    <ID>VariableNaming:ImageLoader.kt$ImageLoader$var `in` = ctx.assets.open(assetPath)</ID>
+  </CurrentIssues>
+</SmellBaseline>
