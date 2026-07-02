@@ -99,6 +99,12 @@ class ConfigReceiver : BroadcastReceiver() {
         const val KEY_ALBUMS = "album_urls" // JSON array of configured album URLs
         const val KEY_ALBUMS_DISABLED = "album_urls_disabled" // JSON array of stopped album URLs
         const val KEY_GUARD = "screensaver_guard" // boolean: keep re-asserting Frame as the dream
+        // "Sleep when the room's empty" — mirror the Immortal launcher's presence-follow. When on,
+        // the slideshow does NOT pin the screen on; the Portal's own presence-driven power manager
+        // dreams (re-firing Frame) while someone's present and truly sleeps when the room empties.
+        // Off by default → the shipped always-on behaviour is unchanged.
+        const val KEY_PRESENCE = "presence_sleep"
+        const val DEFAULT_PRESENCE = false
         const val KEY_NOTES = "sticky_notes" // master switch for the whole sticky-note + fortune overlay
         const val KEY_DROP_TOKEN = "drop_token" // secret gating the LAN photo-drop server (in its QR)
         const val KEY_NOTE = "note" // sticky-note text shown on the frame ("" = hidden)
@@ -156,6 +162,7 @@ class ConfigReceiver : BroadcastReceiver() {
             arrayOf("captions", KEY_CAPTIONS), arrayOf("face_framing", KEY_FACE), arrayOf("ambient_color", KEY_AMBIENT),
             arrayOf("auto_enhance", KEY_ENHANCE), arrayOf("zoom_fill", KEY_ZOOM_FILL),
             arrayOf("fortune", KEY_FORTUNE), arrayOf("sticky_notes", KEY_NOTES),
+            arrayOf("presence", KEY_PRESENCE),
         )
 
         // Per-album photo caches are managed by AlbumCache (keyed by album URL).

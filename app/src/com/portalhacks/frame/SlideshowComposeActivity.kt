@@ -73,12 +73,20 @@ class SlideshowComposeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-                or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-                or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                or WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
-        )
+        // FLAG_KEEP_SCREEN_ON pins the frame on forever (the shipped always-on behaviour). In the
+        // opt-in presence mode we DROP that one flag: the Portal's own presence-driven power manager
+        // then governs — at each screen-off timeout it dreams (re-firing this Activity via
+        // FrameDreamService) while someone's present, and truly sleeps when the room empties. This
+        // mirrors how the Immortal launcher's screensaver rides the presence signal. See [KEY_PRESENCE].
+        val presenceMode = getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE)
+            .getBoolean(ConfigReceiver.KEY_PRESENCE, ConfigReceiver.DEFAULT_PRESENCE)
+        var flags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+        if (!presenceMode) {
+            flags = flags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        }
+        window.addFlags(flags)
         // Honor the Portal's own brightness: don't override the window brightness, so the
         // system's adaptive/manual brightness (and its light sensor) governs the frame.
         window.attributes = window.attributes.apply {

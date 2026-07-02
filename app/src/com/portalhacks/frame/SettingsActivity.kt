@@ -302,6 +302,12 @@ class SettingsActivity : ComponentActivity() {
                     ToggleRow("Only clock in low light", ConfigReceiver.KEY_CLOCK_LOW_LIGHT, ConfigReceiver.DEFAULT_CLOCK_LOW_LIGHT) { tick++ }
                     Divider()
                     ToggleRow("Night warmth", ConfigReceiver.KEY_NIGHT, true) { tick++ }
+                    Divider()
+                    ToggleRow(
+                        "Sleep when the room's empty", ConfigReceiver.KEY_PRESENCE, ConfigReceiver.DEFAULT_PRESENCE,
+                        subtitle = "Turn the screen off when no one's around and wake it when you " +
+                            "return, using the Portal's presence sensor — instead of staying on all the time.",
+                    ) { tick++ }
                 }
                 Divider()
                 CollapsibleRow(
